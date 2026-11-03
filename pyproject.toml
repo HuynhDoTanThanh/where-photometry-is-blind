@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rigidfill"
+version = "1.0.0"
+description = "Inference-time geometric correction of optical flow in driving scenes (RigidFill)"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+dependencies = ["numpy>=1.21", "opencv-python>=4.5"]
+keywords = ["optical flow", "structure from motion", "KITTI", "unsupervised learning"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[project.urls]
+Homepage = "https://huynhdotanthanh.github.io/where-photometry-is-blind/"
+Source = "https://github.com/HuynhDoTanThanh/where-photometry-is-blind"
+
+[tool.setuptools]
+packages = ["rigidfill"]
+
+[tool.setuptools.package-data]
+rigidfill = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["UP006", "UP007", "UP035", "UP045"]

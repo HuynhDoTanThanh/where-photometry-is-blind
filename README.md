@@ -1,6 +1,6 @@
-# Where Photometry Is Blind
+# Where Photometry Is Blind: RigidFill
 
-**Inference-Time Geometric Correction of Unsupervised Optical Flow in Driving Scenes**
+**Inference-time geometric correction of unsupervised optical flow in driving scenes**
 
 Authors to be announced.
 
@@ -9,170 +9,231 @@ Authors to be announced.
 ![Frame t of KITTI-12 image 000163 with the labelled pixels that leave frame t+1 in orange; frame t+1; outlier pixels of U²Flow and of U²Flow with RigidFill in red](docs/assets/img/teaser.jpg)
 
 Unsupervised optical flow learns from photometric consistency, so a pixel that leaves the next
-frame gets no direct training signal. On the KITTI 2012 training set (KITTI-12), such
-out-of-frame pixels are 13.1% of the labelled pixels but 44.0–44.5% of the outliers of three
-unsupervised networks (U²Flow, ARFlow, Sun-RAFT), and their outlier rate is more than five times
-that of the other pixels (post-hoc analysis). **RigidFill** corrects a frozen network at
-inference time: it estimates the camera motion from the network's reliable correspondences,
-triangulates the backward correspondences to get depth, reprojects the scene into the next
-camera, and replaces the network's flow with this rigid flow only where the network is
-uncertain. It changes no network weights, but its replacement source, gate form and thresholds
-were selected on 100 labelled development images. It needs three frames and calibrated
-intrinsics.
+frame gets no direct training signal, and such out-of-frame pixels carry a large share of the
+errors of unsupervised networks. **RigidFill** corrects a frozen network at inference time,
+without retraining: it estimates the camera motion from the network's own reliable
+correspondences, triangulates the backward correspondences (frame t to t−1) to get the depth of
+frame t, reprojects every pixel into camera t+1, and replaces the network's flow with this
+rigid flow where the network is uncertain. It needs three consecutive frames and the camera
+intrinsics. This repository is a small, pip-installable Python package (NumPy and OpenCV only)
+with examples and tests.
 
-## Key results
+## Installation
 
-Fl is the KITTI outlier rate (%): the share of labelled pixels whose flow error exceeds both 3 px and
-5% of the true flow magnitude. Gain = base Fl minus corrected Fl, in percentage points (pp),
-with its 95% paired image-bootstrap interval.
-
-| Evaluation | U²Flow | + RigidFill | Gain (pp) | Analysis |
-|---|---:|---:|---|---|
-| KITTI-15 held-out half (100 images), read once | 7.384 | **6.949** | 0.434 [0.259, 0.633] | pre-specified, primary |
-| KITTI-12 (194 images) | 4.130 | **3.613** | 0.517 [0.396, 0.644] | pre-specified |
-| HD1K (outlier threshold scaled to its resolution) | 1.571 | 1.548 | no harm beyond a declared margin; the rule barely acts (replaces 0.36% of labelled pixels); not a transfer test | plan declared before scoring |
-
-- **Other networks** (KITTI-12, post hoc): ARFlow gains 0.99 pp and Sun-RAFT 0.66 pp, each with
-  its own gate; the out-of-frame outlier rate of all three networks falls by 25–30%.
-- **Against U²Flow's learned per-image fusion (+FF)**: better on KITTI-12 at each of three +FF
-  seeds, by 0.394, 0.383 and 0.385 pp (post hoc); on the held-out half the pre-specified
-  comparison is inconclusive.
-- **Runtime** (median per image on one GPU, all network passes included): network alone 22.2 ms,
-  RigidFill 1,036.2 ms, +FF 2,484.9 ms. RigidFill takes 0.42× the time of +FF and 46.7× that of
-  the network alone: it suits offline or accuracy-first use, not real-time inference.
-
-**Limitations.** No measured gain on moving objects (KITTI-15 development half, out of fold:
-0.571 pp, 95% CI [−0.388, 1.849]); the correction increases the error on MPI Sintel's
-non-rigid scenes; it needs three frames and calibrated intrinsics; its thresholds were selected
-on 100 labelled development images. "Post hoc" marks analyses designed after the first KITTI-12
-evaluation on images already used for a decision, as in the paper.
-
-## What is in this repository
-
-```
-tools/
-  p1/          RigidFill: network evidence, self-triangulation, rigid rendering, the gate,
-               the comparisons with +FF and other sources, timing
-  p1/p1lib/    shared helpers: cache format, KITTI frames and calibration, the U²Flow wrapper
-  eval/        KITTI evaluation, error regions, statistics, re-scoring of cached predictions
-  lib/         the frozen-plan reader and the ledger writer the evaluation tools import
-  prereg/      seal.py: how the held-out labels were kept apart
-  teacher/     cache format and dependencies of the external geometry sources (comparisons)
-  vm/          GPU-VM helpers and the SAM mask producer of the benchmark entry
-  data/        build_bundles.py, imported for its deterministic zip writer
-prereg/        the pre-specified analysis plan (PRIMARY.json), its recorded limitations, and
-               the prereg-v3 tag manifest with its OpenTimestamps proof
-splits/        the KITTI-15 development/held-out split (100 + 100 images)
-docs/          the project page (GitHub Pages, served from /docs)
-SHA256SUMS     SHA-256 of every file under tools/, prereg/ and splits/
+```bash
+git clone https://github.com/HuynhDoTanThanh/where-photometry-is-blind.git
+cd where-photometry-is-blind
+pip install -e .                 # Python >= 3.9; installs numpy and opencv-python
+pip install -e ".[test]" && pytest   # optional: run the tests (CPU, a few seconds)
 ```
 
-The files under `tools/`, `prereg/` and `splits/` are byte-identical to the reviewer package
-built from the authors' research repository (`shasum -a 256 -c SHA256SUMS`). They were not
-edited for this release, because the analysis plan pins the analysis code by SHA-256. Comments
-and docstrings name record ids of the authors' internal ledger (EV-, RES-, IDEA- and similar);
-they are kept for traceability, and the ledger itself is not included. Some modules carry the
-authors' local paths as defaults; pass your own paths on the command line.
+RigidFill itself needs no GPU and no deep-learning framework. Running a flow network (for example
+U²Flow, below) needs that network's own dependencies.
 
-The files in `prereg/` and `splits/` are records of the pre-registration, published as they
-were frozen; the MIT licence covers the code.
+## Quick start
 
-**Not included:** U²Flow's code and checkpoints, which come from
-[github.com/sunzunyi/U2FLOW](https://github.com/sunzunyi/U2FLOW) (Sun et al., CVPR 2026; that
-repository ships no licence); the code of RAFT, ARFlow and Sun-RAFT, which `dump_eval.py` loads
-from their own checkouts; datasets, predictions, caches and the authors' data manifests.
+Try it without any download on a synthetic driving scene, where a simulated network
+under-estimates the flow of the pixels that leave the frame:
 
-## Requirements
+```bash
+python examples/synthetic_demo.py
+```
 
-- Python 3.10 or newer.
-- `numpy` and `opencv-python` (essential matrices, pose recovery, error regions) for the
-  geometry, the gate and the evaluation.
-- `torch` for the network passes (`dump_eval.py`, `eval_kitti.py`, `gpu_refit.py`,
-  `time_arbitration.py`) and the GPU triangulation; `imageio` for reading frames.
-- A checkout of [U²Flow](https://github.com/sunzunyi/U2FLOW) with its released KITTI checkpoint:
-  the modules import its `configs`, `core` and `train_fusion_kitti` modules.
-- Optional: `threadpoolctl` (timing), `requests` (data bundles), and `Pillow` with
-  `segment_anything` (the SAM masks of the benchmark entry only).
+```
+RigidFill: ok in 1977 ms (CPU)
+  forward motion |t| = 1.117 backward baselines (true 1.111); RANSAC inliers 190,503 (backward), 156,242 (forward)
+  replaced 90,346 of 465,750 pixels (19.4%); 91,031 pixels leave the frame
+                             network  RigidFill
+  out-of-frame EPE (px)       28.722      1.459
+  in-frame EPE (px)            0.163      0.156
+  all pixels EPE (px)          5.745      0.411
+```
 
-The modules expect to sit at `tools/` inside a U²Flow checkout. They find the repository root
-from their own location, import U²Flow's packages from it, and read KITTI 2012 and KITTI 2015
-from a data root. They are provided for reading and checking the method; running them end to end
-needs those inputs.
+With your own network's outputs:
 
-## How the pieces fit
+```python
+import rigidfill
 
-1. **Network evidence.** `tools/p1/dump_eval.py` runs the frozen network on frames *t*−1, *t*,
-   *t*+1 of each KITTI sequence and caches the forward flow *S*, its uncertainty *α*, the
-   backward flow *F*<sub>b</sub> and the forward–backward visibility (`p1lib/u2flow.py` wraps
-   U²Flow's own loader, network and occlusion test). ARFlow, Sun-RAFT and RAFT run through the
-   same entry point.
-2. **Camera motion and depth.** `tools/p1/self_triangulate.py` estimates the two relative poses
-   with a five-point RANSAC on visible, in-frame, low-uncertainty correspondences, triangulates
-   every visible backward correspondence to get the depth *D*<sub>b</sub>, and aligns the two
-   baselines by a median depth ratio.
-3. **Rigid flow.** `tools/p1/render_frig.py`, with `tools/p1/rigid.py`, reprojects each pixel
-   with a backward depth into camera *t*+1. The rigid flow *T* is defined whether or not the point
-   stays in view, and is carried to native resolution as the network's flow is.
-4. **Gate and evaluation.** `tools/p1/arbitration_cv.py` holds the frozen rule
-   (`FROZEN_ALPHA_GT`, `FROZEN_D_LE_PX`: replace *S* by *T* where *α* exceeds the threshold and
-   *T* lies within the distance bound of *S*) and the selection procedure on the development half;
-   `selftri_vs_ff.py` compares it with +FF; `render_heldout.py` renders *T* for the held-out
-   images; `tools/eval/` scores Fl and the paired image bootstrap (`eval_kitti.py`, `regions.py`,
-   `stats.py`, `score_cached.py`).
-5. **The rule on fresh inputs.** `tools/p1/selftri_train_maps.py` (`selftri_maps`) applies the
-   whole rule to new network outputs on the CPU; `gpu_refit.py` and `exact_refit_par.py` are the
-   faster implementations, and `time_arbitration.py` measures the runtimes.
+# Outputs of the network on its input grid (h, w), e.g. 256 x 832 for U2Flow on KITTI.
+# Pass 1 on frames (t, t+1): flow_fw (2, h, w), its uncertainty alpha_fw (h, w), visibility vis_fw
+# Pass 2 on frames (t-1, t): flow_bw (2, h, w) = the flow t -> t-1, alpha_bw, vis_bw
+K = rigidfill.read_kitti_intrinsics("calib/000163.txt")          # 3x3 at native resolution
+out, info = rigidfill.correct_flow(flow_fw, flow_bw, alpha_fw, K, image_size=(375, 1242),
+                                   vis_fw=vis_fw, vis_bw=vis_bw, alpha_bw=alpha_bw)
+rigidfill.write_kitti_flow("000163_10.png", out)                 # (2, 375, 1242) float32
+print(info.ok, info.n_replaced, info.failure)
+```
 
-The other modules (`arbitrate.py`, `arbitrate_run.py`, `composite_bound.py`, `region_table.py`,
-`refine_pose.py`, `gate_maps.py`, `tools/teacher/`, `tools/vm/`) belong to the comparisons and
-experiments reported in the paper and its supplement, and to the import closure of the files
-above.
+`out` is the corrected forward flow at native resolution. `info` holds the replaced pixels
+(`info.gate`), the rigid flow (`info.rigid_flow`), the network's upsampled flow
+(`info.base_flow`), the camera motion and depth (`info.geometry`), and, when no rigid flow
+can be computed (for example a stationary camera), `info.ok = False` with the reason, in which
+case `out` is the network's flow.
 
-## Verifying the pre-registration
+## What RigidFill needs
 
-Before the held-out labels were read, the analysis plan fixed the compared methods, the
-endpoint, the interval levels, the multiplicity rule and the sentence to be reported for each
-outcome. The version-control tag `prereg-v3` froze it with the split.
+| Input | Shape | Notes |
+|---|---|---|
+| `flow_fw` | (2, h, w) | forward flow t → t+1 on the network grid: the flow to correct |
+| `flow_bw` | (2, h, w) | backward flow t → t−1, from a second pass on frames (t−1, t) |
+| `alpha_fw`, `alpha_bw` | (h, w) | uncertainty of each flow: U²Flow's log-variance, or `rigidfill.fb_score` for networks without an uncertainty head |
+| `vis_fw`, `vis_bw` | (h, w) bool | forward-backward visibility of each flow (`rigidfill.fb_consistency`) |
+| `K` | (3, 3) | intrinsics of the native image; rescaled to the grid internally |
+| `image_size` | (H, W) | native size of the output; omit if the flows are already native |
+| `base_flow` | (2, H, W) | optional: the network's own native-resolution output; default: `rigidfill.upsample_flow(flow_fw, image_size)` |
 
-1. The plan file:
+All flows are `(u, v)` in pixels, channel first. Pixel (x, y) is column x and row y, and
+integer coordinates are pixel centres.
 
-   ```bash
-   shasum -a 256 prereg/PRIMARY.json
-   # ce8e7bf5617f4f3f9723b3d269ec3f75041e13ba75c218adfb94cdbf0bea241a
-   ```
+## Using it with U²Flow
 
-2. The tag's manifest `prereg/tags/prereg-v3.json` lists the SHA-256 of every plan and split file
-   at the tag. Three of them are in this repository:
+[U²Flow](https://github.com/sunzunyi/U2FLOW) (Sun et al., CVPR 2026) is not included here (its
+repository has no licence). Clone it, download its released KITTI checkpoint (`kitti.pth`),
+install its dependencies, and run:
 
-   ```bash
-   python3 -c 'import hashlib, json; m = json.load(open("prereg/tags/prereg-v3.json"))["files"]; [print("OK" if hashlib.sha256(open(p, "rb").read()).hexdigest() == m[p] else "MISMATCH", p) for p in ("prereg/PRIMARY.json", "prereg/limitations.md", "splits/k15_split_v1.json")]'
-   ```
+```bash
+python examples/run_u2flow.py --u2flow /path/to/U2FLOW --ckpt /path/to/U2FLOW/checkpoints/kitti.pth \
+    --frames training/image_2/000163_09.png training/image_2/000163_10.png training/image_2/000163_11.png \
+    --calib training/calib/000163.txt --gt training/flow_occ/000163_10.png --out outputs/u2flow
+```
 
-   The other entries are the gate criteria, drafts and inputs of the pre-registration.
+The script runs U²Flow as in the paper: frames resized to its 256 × 832 grid, two bidirectional
+passes, on (t, t+1) and on (t−1, t), with its uncertainty head and its own forward-backward
+occlusion test. It writes the corrected flow and U²Flow's flow as KITTI flow PNGs and a figure,
+and with `--gt` prints Fl and EPE. On KITTI 2012 image 000163 (the teaser above), on a CPU:
 
-3. The Bitcoin anchor of the manifest (OpenTimestamps client,
-   `pip install opentimestamps-client`; `ots verify` needs a Bitcoin node, see
-   `--bitcoin-node`):
+```
+U2Flow, two bidirectional passes: 3825 ms on cpu
+RigidFill: 1737 ms on the CPU; replaced 28,004 pixels (6.01%)
+  RANSAC inliers 179,866 (t->t-1), 138,353 (t->t+1); baseline ratio lambda 1.003
+  U2Flow            Fl 10.054% (13,553 outliers)   EPE  1.906 px
+  U2Flow+RigidFill  Fl  7.371% (9,936 outliers)   EPE  1.485 px
+```
 
-   ```bash
-   shasum -a 256 prereg/tags/prereg-v3.json
-   # 445073fbc1115a14e9769863f92e88589bdd613ba04fac399af4890d4b4eda7b  (the hash the proof commits to)
-   ots verify prereg/tags/prereg-v3.json.ots
-   ```
+On a CPU the network runs in float32, while the paper's GPU runs used U²Flow's half-precision
+autocast (which U²Flow's code switches on by itself on a CUDA GPU). The flows differ by about
+0.001 px, but RANSAC can settle on a different pose after such tiny changes, so a single image
+can change a lot: with the paper's GPU outputs, image 000163 has 7,027 outliers after RigidFill
+instead of 9,936. Over the 194 KITTI 2012 images, this CPU pipeline lowers Fl from 4.129% to
+3.716% (RigidFill improves 146 images and worsens 31), against 4.130% to 3.613% with the
+paper's GPU outputs.
 
-   Without a node: in the output of `ots -v info prereg/tags/prereg-v3.json.ots`, the value on
-   the line before `verify BitcoinBlockHeaderAttestation(971068)`, read byte-reversed, must equal
-   the merkle root of block 971,068 shown by any block explorer:
-   `7a7918be68a5f722ab83adf5aab3ecb8335042c7c10d1f9ea4279c7a6934bf96`.
+## Using it with other networks
 
-4. Timing, all on 12 October 2026 (UTC): the tag `prereg-v3` was created at 08:43:09, the
-   held-out score was recorded at 08:43:48, and Bitcoin block 971,068 was mined at 09:03:40. The
-   proof therefore shows that the plan has not changed since that block was mined; that the tag
-   came before the held-out read rests on the repository history, not on the proof.
+For a network without an uncertainty head, use the squared forward-backward residual
+`r` as the score, `alpha = ln(r + 1e-3)`, and the matching gate:
 
-The plan pins its analysis code by SHA-256 (the `code_sha256` maps in `prereg/PRIMARY.json`).
-Every pinned file in `tools/` matches its pin; the one pinned file not included is U²Flow's
-`core/utils/flow_utils.py`.
+```python
+# pass 1 on (t, t+1) gives flow_fw (t -> t+1) and flow_fw_rev (t+1 -> t)
+# pass 2 on (t-1, t) gives flow_bw (t -> t-1) and flow_bw_rev (t-1 -> t)
+_, vis_fw = rigidfill.fb_consistency(flow_fw, flow_fw_rev)
+_, vis_bw = rigidfill.fb_consistency(flow_bw, flow_bw_rev)
+alpha_fw = rigidfill.fb_score(flow_fw, flow_fw_rev)
+alpha_bw = rigidfill.fb_score(flow_bw, flow_bw_rev)
+out, info = rigidfill.correct_flow(flow_fw, flow_bw, alpha_fw, K, image_size,
+                                   vis_fw=vis_fw, vis_bw=vis_bw, alpha_bw=alpha_bw,
+                                   gate="arflow")      # or "sunraft", or GateParams(...)
+```
+
+The `"arflow"` and `"sunraft"` presets are the gates selected for those two networks on the
+KITTI 2015 development half (their flows taken on the 256 × 832 grid). For another network,
+select `tau`, `d_max` and `d_min` on labelled images of your own. Where a correspondence leaves
+the frame the residual reduces to the squared flow magnitude, so this score then acts as a
+motion threshold rather than a confidence.
+
+## Parameters
+
+| Quantity | Argument | Paper value |
+|---|---|---|
+| Network grid | shape of the flows | 256 × 832 (U²Flow on KITTI) |
+| Pose cutoff on the uncertainty | `alpha_max` | α ≤ ln 2 (σ² ≤ 2) |
+| Essential matrix (`cv2.findEssentialMat`, five-point RANSAC) | `ransac_threshold`, `ransac_confidence` | 1 grid px, 0.999, OpenCV's default iteration cap |
+| Pose recovery (`cv2.recoverPose`) | – | OpenCV's default depth limit, 50 baselines |
+| Minimum support | – | 8 correspondences, 8 inliers in front of both cameras, 8 pixels with both depths |
+| Gate: uncertainty threshold, `alpha > tau` | `tau` | 2.75 (U²Flow, σ² > 15.6), 1.0 (ARFlow), 1.5 (Sun-RAFT) |
+| Gate: upper bound, `‖T − S‖ ≤ d_max` (native px) | `d_max` | 100 (U²Flow, ARFlow), none (Sun-RAFT) |
+| Gate: lower bound, `‖T − S‖ > d_min` (native px) | `d_min` | none (U²Flow), 6 (ARFlow), 8 (Sun-RAFT) |
+| Visibility test | `rigidfill.fb_consistency` | ‖F + w‖² ≤ 0.01 (‖F‖² + ‖w‖²) + 0.5 grid px² |
+| Depth storage before rendering | `half_precision_depth` | float16 inverse depth (`True`) |
+
+Only `tau` and `d_max` (and the other networks' gates) were tuned, on the 100 KITTI 2015
+development images; the other constants were never tuned. Presets: `rigidfill.PRESETS`.
+
+### How it works
+
+1. **Camera motion.** For each direction d ∈ {backward, forward}, the visible pixels whose
+   correspondence stays in the frame and whose uncertainty is at most ln 2 fit an essential
+   matrix (`rigidfill.estimate_pose`); its decomposition gives a rotation and a unit
+   translation.
+2. **Depth.** Every visible, in-frame correspondence is triangulated (`rigidfill.triangulate`);
+   a depth is kept if the point is in front of both cameras. The scale λ is the median ratio of
+   backward to forward depth over pixels with both (`rigidfill.fit_geometry`).
+3. **Rigid flow.** Each pixel with a backward depth D_b is reprojected into camera t+1:
+   T(p) = π(K [R_f D_b(p) K⁻¹ p̃ + λ t_f]) − p (`rigidfill.rigid_flow`). This works for points
+   that leave the image, which have no forward match but were visible in frame t−1.
+4. **Gate.** T, α and the network's flow S are brought to native resolution with U²Flow's
+   bilinear upsampling (`rigidfill.upsample_flow`, `upsample_score`), and the output is T where
+   T is defined, α > τ and d_min < ‖T − S‖ ≤ d_max, else S (`rigidfill.uncertainty_gate`).
+
+The whole image keeps the network's flow if a pose or the scale cannot be estimated.
+
+## Results (from the paper)
+
+Fl is the KITTI outlier rate (%): the share of labelled pixels whose flow error exceeds both
+3 px and 5% of the true flow magnitude. Gain = base Fl minus corrected Fl, in percentage
+points (pp), with its 95% confidence interval.
+
+| Evaluation | Fl, U²Flow | Fl, U²Flow + RigidFill | Gain (pp) |
+|---|---:|---:|---|
+| KITTI 2015, held-out half (100 images) | 7.384 | **6.949** | 0.434 [0.259, 0.633] |
+| KITTI 2012 (194 images) | 4.130 | **3.613** | 0.517 |
+
+On KITTI 2012, RigidFill also improves ARFlow by 0.99 pp and Sun-RAFT by 0.66 pp in Fl, each
+with its own gate.
+
+The held-out half is the second half of `data/kitti15_split.json`; RigidFill's thresholds were
+selected on the first (development) half.
+
+**Runtime.** Median per KITTI image in the paper, on one NVIDIA RTX PRO 6000 Blackwell GPU with
+all network passes included: U²Flow alone 22.2 ms, U²Flow with RigidFill 1,036.2 ms (the
+paper's GPU implementation, which triangulates on the GPU). This package runs RigidFill on the
+CPU: a median of 1.73 s per KITTI image on an Apple M4 (NumPy and OpenCV defaults, network
+passes excluded, 194 KITTI 2012 images), about half in the per-pixel triangulation and half in
+OpenCV's pose recovery. It suits offline or accuracy-first use, not real-time inference.
+
+**Limitations.** No measured gain on moving objects: RigidFill assumes a static scene, and the
+depths of independently moving points are wrong. On the non-rigid scenes of MPI Sintel the
+unchanged gate increases the error. It needs three consecutive frames and calibrated
+intrinsics, and its thresholds were selected on 100 labelled KITTI 2015 images.
+
+## Agreement with the paper's implementation
+
+We checked this package against the implementation behind the paper's numbers on the 194
+KITTI 2012 images, feeding it the paper's stored U²Flow outputs: it reproduces the RANSAC
+inlier counts, poses and scales of all 193 images that have a rigid flow (and the failure of
+the 194th, image 000180), replaces the same 4,668,075 pixels, gives a rigid flow at native
+resolution within 0.001 px of the stored one at all but 19 pixels (none of them replaced; at
+most 0.063 px), and reaches Fl 3.613016% against the paper's 3.613020% (U²Flow: 4.130272%), a
+difference of one pixel whose error lies on the 5% outlier threshold. The stored rigid flow was
+rendered from single-precision intrinsics and poses, which explains the residual differences.
+The results were the same with OpenCV 5.0.0 (Python 3.12 and 3.9) and OpenCV 4.14.0 (Python 3.9).
+
+## Repository layout
+
+```
+rigidfill/                  the package
+  pipeline.py               correct_flow: RigidFill end to end
+  geometry.py               correspondences, estimate_pose, triangulate, fit_geometry, rigid_flow
+  gate.py                   uncertainty_gate, GateParams, PRESETS
+  resize.py                 upsample_flow, upsample_score (U²Flow's upsampling in NumPy)
+  consistency.py            fb_consistency, fb_score (networks without an uncertainty head)
+  io.py, metrics.py, viz.py KITTI flow PNGs and calibration files, Fl and EPE, colour coding
+  synthetic.py              the synthetic scene of the demo and the tests
+examples/                   synthetic_demo.py, run_u2flow.py
+tests/                      pytest suite (CPU)
+data/kitti15_split.json     the development and held-out halves of KITTI 2015 training
+docs/                       the project page (GitHub Pages)
+```
 
 ## Citation
 
@@ -186,21 +247,21 @@ Every pinned file in `tools/` matches its pin; the one pinned file not included 
 }
 ```
 
+## Licence
+
+The code is released under the [MIT licence](LICENSE). U²Flow's code and checkpoints are not
+part of this repository; they come from [github.com/sunzunyi/U2FLOW](https://github.com/sunzunyi/U2FLOW),
+which ships no licence. Images in `docs/assets/img/` derived from the KITTI Vision Benchmark
+Suite are shared under CC BY-NC-SA 3.0, as KITTI is. The fonts in `docs/assets/fonts/`
+(Barlow, Source Serif 4) are under the SIL Open Font License 1.1.
+
 ## Use of AI tools
 
 Coding agents based on large language models (Anthropic's Claude through Claude Code, and
-OpenAI's Codex) were used in this work to write and review code and to run experiments under
-decision rules recorded in advance; Claude also drafted and edited text, including this README. The
-authors reviewed the results and take responsibility for them; the paper's declaration gives the
+OpenAI's Codex) were used in this work to write and review code, including this package, and
+to run experiments; Claude also drafted and edited text, including this README. The authors
+reviewed the results and take responsibility for them; the paper's declaration gives the
 details.
-
-## Licence
-
-The code is released under the [MIT licence](LICENSE). The files in `prereg/` and `splits/` are
-records of the pre-registration. Images in `docs/assets/img/` derived from the KITTI Vision
-Benchmark Suite are shared under CC BY-NC-SA 3.0, as KITTI is. The fonts in
-`docs/assets/fonts/` (Barlow, Source Serif 4) are under the SIL Open Font License 1.1.
-U²Flow's code and checkpoints are not part of this repository.
 
 ## Acknowledgements
 

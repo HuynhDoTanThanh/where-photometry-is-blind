@@ -1,4 +1,7 @@
 # Python
+*.egg-info/
+build/
+dist/
 __pycache__/
 *.py[cod]
 .venv/
@@ -12,7 +15,8 @@ venv/
 *.pth
 *.pt
 *.ckpt
-/data/
+/data/*
+!/data/kitti15_split.json
 /U2FLOW_data/
 /runs/
 /output/
