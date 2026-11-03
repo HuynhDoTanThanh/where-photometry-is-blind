@@ -189,8 +189,8 @@ Every pinned file in `tools/` matches its pin; the one pinned file not included 
 ## Use of AI tools
 
 Coding agents based on large language models (Anthropic's Claude through Claude Code, and
-OpenAI's Codex) were used in this work: they wrote and reviewed code, ran experiments under
-decision rules recorded in advance, and drafted and edited text, including this README. The
+OpenAI's Codex) were used in this work to write and review code and to run experiments under
+decision rules recorded in advance; Claude also drafted and edited text, including this README. The
 authors reviewed the results and take responsibility for them; the paper's declaration gives the
 details.
 

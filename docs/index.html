@@ -380,7 +380,7 @@
       </div>
       <div class="fact">
         <h3>HD1K</h3>
-        <p>On HD1K, a driving dataset recorded in Heidelberg with no KITTI drive, the frozen rule barely acts: it replaces the flow on 0.36% of labelled pixels. With the outlier threshold scaled to HD1K's resolution, Fl moves from 1.571% to 1.548%, so the rule does not harm the network beyond a margin declared in advance. We read this as no harm on a second camera and city, with grayscale input and labels for the static scene only (data from an unofficial mirror, identified in the paper), not as a test of transfer.</p>
+        <p>On HD1K, a driving dataset recorded in Heidelberg with no KITTI drive, the frozen rule barely acts: it replaces the flow on 0.36% of labelled pixels. With the outlier threshold scaled to HD1K's resolution, Fl moves from 1.571% to 1.548%, so the rule does not harm the network beyond a margin declared in advance. We read this as no harm beyond that margin on a second camera and city, with grayscale input and labels for the static scene only (data from an unofficial mirror, identified in the paper), not as a test of transfer.</p>
       </div>
     </div>
 
@@ -410,7 +410,7 @@
       <li><h3>Three frames and calibration</h3><p>It needs a third frame and calibrated intrinsics, and a mostly static scene.</p></li>
       <li><h3>It uses labels</h3><p>No network weights change, but the replacement source, gate form and thresholds were selected on 100 labelled KITTI-15 development images.</p></li>
       <li><h3>It is slow</h3><p>It takes 46.7 times the network's runtime: for offline or accuracy-first use, not real time.</p></li>
-      <li><h3>Narrow held-out evidence</h3><p>The held-out test covers one network and one fixed checkpoint, whose unsupervised training saw unlabelled neighbouring frames of these scenes. Its image-level bootstrap ignores that KITTI images come in correlated drives, so a drive-level interval would be wider.</p></li>
+      <li><h3>Narrow held-out evidence</h3><p>The held-out test covers one network and one fixed checkpoint, whose unsupervised training saw unlabelled neighbouring frames of these scenes. Its image-level bootstrap ignores that KITTI images come in correlated drives. The interval would reach zero only if a drive-level interval were 2.483 times as wide on its lower side; on the development half, resampling drives widens it by a factor of 1.034–1.206, so, if the held-out drives are as correlated (assumed, not checked), it would still exclude zero.<a class="dagger" href="#posthoc-note-2" aria-label="post hoc, see note">†</a></p></li>
       <li><h3>Driving scenes only</h3><p>All positive results are on driving scenes, and nearly all on KITTI. KITTI-12, where most analyses run, contains only static scenes: the most favourable case for a rigid fill.</p></li>
       <li><h3>Geometry errors</h3><p>Its largest KITTI-12 failure, shown above, comes from a wrong rigid flow on a parked car at the image border.</p></li>
     </ul>
@@ -499,7 +499,7 @@ ots verify prereg/tags/prereg-v3.json.ots</code></pre>
       <li><strong>Images</strong> on this page are derived from the KITTI Vision Benchmark Suite and shared under CC BY-NC-SA 3.0.</li>
       <li><strong>Fonts</strong>: Barlow and Source Serif 4, SIL Open Font License 1.1, served from this site.</li>
     </ul>
-    <p><strong>Use of AI tools.</strong> Coding agents based on large language models (Anthropic's Claude through Claude Code, and OpenAI's Codex) were used in this work: they wrote and reviewed code, ran experiments under decision rules recorded in advance, and drafted and edited text, including this page. The authors reviewed the results and take responsibility for them; the paper's declaration gives the details.</p>
+    <p><strong>Use of AI tools.</strong> Coding agents based on large language models (Anthropic's Claude through Claude Code, and OpenAI's Codex) were used in this work to write and review code and to run experiments under decision rules recorded in advance; Claude also drafted and edited text, including this page. The authors reviewed the results and take responsibility for them; the paper's declaration gives the details.</p>
   </div>
 </section>
 
