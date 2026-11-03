@@ -2,9 +2,9 @@
 
 **Inference-Time Geometric Correction of Unsupervised Optical Flow in Driving Scenes**
 
-Authors to be announced. Manuscript under review at *Computer Vision and Image Understanding*.
+Authors to be announced.
 
-[Project page](https://huynhdotanthanh.github.io/where-photometry-is-blind/) &nbsp;|&nbsp; Paper: under review &nbsp;|&nbsp; [MIT licence](LICENSE)
+[Project page](https://huynhdotanthanh.github.io/where-photometry-is-blind/) &nbsp;|&nbsp; Paper: coming soon &nbsp;|&nbsp; [MIT licence](LICENSE)
 
 ![Frame t of KITTI-12 image 000163 with the labelled pixels that leave frame t+1 in orange; frame t+1; outlier pixels of U²Flow and of U²Flow with RigidFill in red](docs/assets/img/teaser.jpg)
 
@@ -177,12 +177,12 @@ Every pinned file in `tools/` matches its pin; the one pinned file not included 
 ## Citation
 
 ```bibtex
-@article{rigidfill2026,
-  title   = {Where Photometry Is Blind: Inference-Time Geometric Correction
-             of Unsupervised Optical Flow in Driving Scenes},
-  author  = {Authors to be announced},
-  journal = {Computer Vision and Image Understanding (under review)},
-  year    = {2026}
+@misc{rigidfill2026,
+  title        = {Where Photometry Is Blind: Inference-Time Geometric Correction
+                  of Unsupervised Optical Flow in Driving Scenes},
+  author       = {Authors to be announced},
+  year         = {2026},
+  howpublished = {\url{https://huynhdotanthanh.github.io/where-photometry-is-blind/}}
 }
 ```
 
