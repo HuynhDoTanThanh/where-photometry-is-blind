@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Where Photometry Is Blind | RigidFill</title>
+  <meta name="description" content="RigidFill corrects a frozen unsupervised optical flow network where photometry gives no signal: pixels that leave the next frame. It rebuilds camera motion and depth from the network's own flow and replaces the flow only where the network is uncertain.">
+  <link rel="canonical" href="https://huynhdotanthanh.github.io/where-photometry-is-blind/">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#F3F6F7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#10202A" media="(prefers-color-scheme: dark)">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="RigidFill">
+  <meta property="og:title" content="Where Photometry Is Blind: Inference-Time Geometric Correction of Unsupervised Optical Flow in Driving Scenes">
+  <meta property="og:description" content="Pixels that leave the next frame get no photometric signal. RigidFill fills them with rigid flow rebuilt from a frozen network's own correspondences, only where the network is uncertain.">
+  <meta property="og:url" content="https://huynhdotanthanh.github.io/where-photometry-is-blind/">
+  <meta property="og:image" content="https://huynhdotanthanh.github.io/where-photometry-is-blind/assets/img/social-preview.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="A KITTI street scene; orange marks the pixels whose match leaves the next frame. Title: Where Photometry Is Blind.">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Where Photometry Is Blind (RigidFill)">
+  <meta name="twitter:description" content="Inference-time geometric correction of unsupervised optical flow where photometry gives no signal.">
+  <meta name="twitter:image" content="https://huynhdotanthanh.github.io/where-photometry-is-blind/assets/img/social-preview.png">
+  <meta name="twitter:image:alt" content="A KITTI street scene; orange marks the pixels whose match leaves the next frame. Title: Where Photometry Is Blind.">
+
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="assets/img/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
+
+  <link rel="preload" href="assets/fonts/BarlowCondensed-normal-600-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/SourceSerif4-normal-400-650-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="assets/css/fonts.css">
+  <link rel="stylesheet" href="assets/css/site.css">
+  <script>
+    /* Apply a stored theme before first paint; storage may be unavailable (private mode). */
+    (function () {
+      document.documentElement.classList.remove("no-js");
+      try {
+        var t = localStorage.getItem("rf-theme");
+        if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+      } catch (e) { /* default: follow the system */ }
+    })();
+  </script>
+  <script src="assets/js/hero.js" defer></script>
+  <script src="assets/js/main.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="nav" id="top">
+  <div class="nav__inner">
+    <a class="nav__brand" href="#top">RigidFill</a>
+    <nav class="nav__links" aria-label="Sections">
+      <a href="#tldr">TL;DR</a>
+      <a href="#blind-spot">Blind spot</a>
+      <a href="#method">Method</a>
+      <a href="#results">Results</a>
+      <a href="#limitations">Limitations</a>
+      <a href="#prereg">Pre-registration</a>
+      <a href="#bibtex">BibTeX</a>
+    </nav>
+    <button class="theme-toggle" type="button" aria-label="Switch to dark theme" data-theme-toggle>
+      <svg class="icon icon--moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
+      <svg class="icon icon--sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/></svg>
+    </button>
+  </div>
+</header>
+
+<main id="main">
+
+<!-- ============================================================ hero -->
+<section class="hero" aria-labelledby="title">
+  <div class="wrap hero__head">
+    <h1 id="title" class="hero__title">Where Photometry Is&nbsp;Blind</h1>
+    <p class="hero__subtitle">Inference-Time Geometric Correction of Unsupervised Optical Flow in Driving Scenes</p>
+    <div class="hero__meta">
+    <p class="hero__authors">Authors to be announced</p>
+    <p class="hero__venue">Manuscript under review at <em>Computer Vision and Image Understanding</em></p>
+    <div class="hero__actions">
+      <span class="btn btn--disabled" role="link" aria-disabled="true" title="The paper is under review and will be linked here once it is public.">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2.5h8l4 4V21.5H6z"/><path d="M14 2.5v4h4"/></svg>
+        Paper <span class="btn__note">under review</span>
+      </span>
+      <a class="btn btn--primary" href="https://github.com/HuynhDoTanThanh/where-photometry-is-blind">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 7 3.5 12l5 5M15.5 7l5 5-5 5"/></svg>
+        Code
+      </a>
+      <a class="btn" href="#bibtex">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5H5.5v15H7M17 4.5h1.5v15H17"/><path d="M9.5 9h5M9.5 12h5M9.5 15h3"/></svg>
+        BibTeX
+      </a>
+    </div>
+    </div>
+  </div>
+
+  <figure class="explainer wrap-wide" data-explainer>
+    <div class="explainer__canvas-wrap">
+      <canvas class="explainer__canvas" role="img"
+        aria-label="Animated diagram. A camera drives forward along a road. In its image, scene points move outward. Points near the border leave the next frame and turn orange: there is no pixel to compare them with. They are visible in the previous frame, so their depth is known, and RigidFill's reprojected rigid flow carries them past the image border."></canvas>
+    </div>
+    <div class="explainer__bar">
+      <ol class="explainer__steps" aria-label="Steps of the animation">
+        <li><button type="button" data-phase="0" aria-pressed="false"><span class="explainer__txt"><span class="explainer__k">The camera drives forward.</span> Scene points flow outward from the centre of the image.</span></button></li>
+        <li><button type="button" data-phase="1" aria-pressed="false"><span class="explainer__txt"><span class="explainer__k">Frames <i>t</i>&minus;1, <i>t</i>, <i>t</i>+1.</span> A flow network matches each pixel of frame <i>t</i> in frame <i>t</i>+1.</span></button></li>
+        <li><button type="button" data-phase="2" aria-pressed="false"><span class="explainer__txt"><span class="explainer__k">Out of frame.</span> Points near the border leave frame <i>t</i>+1: no pixel to compare with.</span></button></li>
+        <li><button type="button" data-phase="3" aria-pressed="false"><span class="explainer__txt"><span class="explainer__k">Seen before.</span> They are usually visible in frame <i>t</i>&minus;1, so triangulation gives their depth.</span></button></li>
+        <li><button type="button" data-phase="4" aria-pressed="false"><span class="explainer__txt"><span class="explainer__k">Reprojected.</span> RigidFill's rigid flow carries them past the image border.</span></button></li>
+      </ol>
+      <button class="explainer__play" type="button" data-play aria-label="Pause animation">
+        <svg class="icon icon--pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg>
+        <svg class="icon icon--play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12-7.5z"/></svg>
+      </button>
+    </div>
+    <p class="explainer__now" data-now aria-hidden="true"></p>
+    <figcaption class="explainer__caption">A synthetic scene, for illustration. Left: the road seen from above, with cameras <i>t</i>&minus;1, <i>t</i> and <i>t</i>+1. Right: the image of camera <i>t</i> and the space beyond its border.</figcaption>
+  </figure>
+</section>
+
+<!-- ============================================================ tl;dr -->
+<section class="section" id="tldr" aria-labelledby="tldr-h">
+  <div class="wrap prose">
+    <h2 id="tldr-h">TL;DR</h2>
+    <p class="lead">Unsupervised optical flow learns from photometric consistency, so a pixel that leaves the next frame gets no direct training signal. RigidFill takes the camera motion and depth from a frozen network's own flow, reprojects the scene into the next frame, and uses that rigid flow only where the network is uncertain. On a held-out half of KITTI 2015, read once under a pre-specified plan, it lowers the released U²Flow model's outlier rate from 7.384% to 6.949%.</p>
+    <h3 class="abstract__h">Abstract</h3>
+    <p class="abstract">Unsupervised optical flow learns from photometric consistency, so a pixel that leaves the next frame receives no direct signal. In a post-hoc analysis of the KITTI 2012 training set (KITTI-12), such out-of-frame pixels are 13.1% of labelled pixels but carry 44.0–44.5% of the outliers of three unsupervised networks. Much of what is needed to correct them is in a trained network's predictions: its confident correspondences give the camera motion and its backward flow the depth of these pixels, so reprojection predicts where they go. RigidFill substitutes this reprojected (rigid) flow for the network's flow only where the network's uncertainty is high. It changes no network weights, but its replacement source, gate form and thresholds were selected on 100 labelled development images. On a held-out half of the KITTI 2015 training set (KITTI-15), under a pre-specified plan, RigidFill lowers the released U²Flow model's outlier rate from 7.384% to 6.949%, a gain of 0.434 percentage points (95% confidence interval [0.259, 0.633]). On KITTI-12 (mostly in post-hoc analyses), it improves all three networks, reduces their out-of-frame outlier rate by a quarter or more and, over all images, is a better replacement than U²Flow's learned per-image fusion and than the external depth, reconstruction and flow sources we tested. The held-out comparison with the fusion is inconclusive. On development images, the gain is shown on the background, while on moving objects it is not distinguishable from zero; on the non-rigid scenes of MPI Sintel the correction increases the error.</p>
+  </div>
+</section>
+
+<!-- ============================================================ blind spot -->
+<section class="section" id="blind-spot" aria-labelledby="blind-h">
+  <div class="wrap">
+    <div class="prose">
+      <h2 id="blind-h">Where photometry is blind</h2>
+      <p>A photometric loss compares frame <i>t</i> with frame <i>t</i>+1 warped by the predicted flow. If a pixel's correspondence lies outside frame <i>t</i>+1, the warp has nothing to sample. No data term constrains the pixel's motion, so the network can only extrapolate it. We measured the consequence on the KITTI 2012 training set (194 images) for three networks trained without flow labels: U²Flow, ARFlow and Sun-RAFT.<a class="dagger" href="#posthoc-note" aria-label="post hoc, see note">†</a></p>
+    </div>
+
+    <div class="mosaics" data-mosaics>
+      <figure class="mosaic" aria-label="13.1% of KITTI-12 labelled pixels leave the next frame.">
+        <div class="mosaic__num" aria-hidden="true"><span data-count="13.1">13.1</span>%</div>
+        <p class="mosaic__label">of labelled pixels leave the next frame</p>
+        <svg class="mosaic__grid" data-mosaic data-solid="131" data-range="0" viewBox="0 0 478 298" aria-hidden="true"></svg>
+      </figure>
+      <figure class="mosaic" aria-label="These pixels are 44.0 to 44.5% of the outliers of each of the three networks.">
+        <div class="mosaic__num" aria-hidden="true"><span data-count="44.0">44.0</span><span class="mosaic__range" data-range-text>–44.5</span>%</div>
+        <p class="mosaic__label">of each network's outliers are such pixels</p>
+        <svg class="mosaic__grid" data-mosaic data-solid="440" data-range="5" viewBox="0 0 478 298" aria-hidden="true"></svg>
+      </figure>
+      <div class="mosaics__aside">
+        <p class="mosaics__big">More than five times</p>
+        <p>the outlier rate of the other pixels, for all three networks.<a class="dagger" href="#posthoc-note" aria-label="post hoc, see note">†</a></p>
+        <p class="mosaics__key"><span class="swatch swatch--oof" aria-hidden="true"></span>Orange: out-of-frame. Each square stands for a thousandth of the pixels; the light squares show the spread across the three networks. Orange squares sit along the border because that is where such pixels lie in an image; the layout is schematic.</p>
+      </div>
+    </div>
+
+    <figure class="photo">
+      <img src="assets/img/k12_000163_frame_oof.jpg" width="1242" height="375" loading="lazy" decoding="async"
+        alt="KITTI-12 image 000163, a residential street. Orange covers a band along the bottom edge and blocks at the left and right borders: the labelled pixels whose true match lies outside the next frame.">
+      <figcaption>KITTI-12 image 000163, frame <i>t</i>. Orange: labelled pixels whose true correspondence lies outside frame <i>t</i>+1. They lie along the bottom and side borders, where a forward-moving camera loses sight of the scene.</figcaption>
+    </figure>
+    <p class="note" id="posthoc-note">† Post hoc: designed after the first KITTI-12 evaluation. The paper marks every such analysis.</p>
+  </div>
+</section>
+
+<!-- ============================================================ method -->
+<section class="section" id="method" aria-labelledby="method-h">
+  <div class="wrap">
+    <div class="prose">
+      <h2 id="method-h">Method</h2>
+      <p>RigidFill corrects a frozen network at inference time. For camera-induced motion, the map from past to future is fixed by geometry: a point's depth follows from its backward correspondence, the camera motion from reliable correspondences elsewhere, and projecting the point into the next camera predicts its displacement, whether or not it stays in view. Every input comes from the flow network's own predictions, so no depth or pose network is needed. The walkthrough below uses the real intermediate results on KITTI-12 image 000034 (right part of the frame).</p>
+    </div>
+
+    <div class="walk" data-walk>
+      <div class="walk__stage-col">
+        <div class="walk__stage">
+          <svg class="stage" data-stage viewBox="0 0 576 375" role="img" aria-labelledby="stage-desc">
+            <desc id="stage-desc">Intermediate results of RigidFill on KITTI-12 image 000034, changing with the selected step.</desc>
+            <defs>
+              <pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                <line x1="0" y1="0" x2="0" y2="7" class="stage__hatch-line"/>
+              </pattern>
+              <marker id="ah-oof" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                <path d="M0 0 10 5 0 10z" class="stage__head--oof"/>
+              </marker>
+              <clipPath id="clip-img"><rect x="0" y="0" width="496" height="375"/></clipPath>
+            </defs>
+            <rect class="stage__outside" x="496" y="0" width="80" height="375" fill="url(#hatch)"/>
+            <text class="stage__outside-label" x="536" y="187" transform="rotate(90 536 187)" text-anchor="middle">outside the image</text>
+            <g clip-path="url(#clip-img)">
+              <image class="stage__layer" data-layer="frame" href="assets/img/m_frame.jpg" x="0" y="0" width="496" height="375" preserveAspectRatio="none"/>
+              <image class="stage__layer" data-layer="gray" href="assets/img/m_gray.jpg" x="0" y="0" width="496" height="375" preserveAspectRatio="none"/>
+              <image class="stage__layer" data-layer="depth" href="assets/img/m_depth.jpg" x="0" y="0" width="496" height="375" preserveAspectRatio="none"/>
+              <image class="stage__layer" data-layer="T" href="assets/img/m_T.jpg" x="0" y="0" width="496" height="375" preserveAspectRatio="none"/>
+              <image class="stage__layer" data-layer="gate" href="assets/img/m_gate.jpg" x="0" y="0" width="496" height="375" preserveAspectRatio="none"/>
+              <image class="stage__layer" data-layer="base" href="assets/img/m_base.jpg" x="0" y="0" width="496" height="375" preserveAspectRatio="none"/>
+              <image class="stage__layer" data-layer="out" href="assets/img/m_out.jpg" x="0" y="0" width="496" height="375" preserveAspectRatio="none"/>
+              <g class="stage__overlay" data-overlay="segments"></g>
+            </g>
+            <g class="stage__overlay" data-overlay="arrows"></g>
+            <rect class="stage__frame" x="0.75" y="0.75" width="494.5" height="373.5"/>
+          </svg>
+          <div class="walk__legend" data-legend aria-live="polite"></div>
+          <div class="walk__toggle" data-out-toggle hidden>
+            <button type="button" data-show="base" aria-pressed="false">U²Flow</button>
+            <button type="button" data-show="out" aria-pressed="true">U²Flow + RigidFill</button>
+          </div>
+        </div>
+        <div class="walk__nav" role="group" aria-label="Choose a step">
+          <button type="button" class="walk__prev" data-walk-prev aria-label="Previous step">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+          </button>
+          <div class="walk__dots" data-walk-dots></div>
+          <button type="button" class="walk__next" data-walk-next aria-label="Next step">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <ol class="walk__steps" data-walk-steps>
+        <li class="walk__step" data-step="0" data-layer-show="frame" data-dot="Inputs">
+          <h3><span class="walk__badge walk__badge--plain">In</span>Two passes of the frozen network</h3>
+          <p>U²Flow runs on frames (<i>t</i>, <i>t</i>+1) and (<i>t</i>&minus;1, <i>t</i>). It returns the forward flow <i>S</i>, its predicted uncertainty <i>α</i>, and the backward flow <i>F</i><sub>b</sub>. Its weights are not changed.</p>
+          <div class="thumbs">
+            <figure><img src="assets/img/m_rgb9.jpg" width="414" height="125" loading="lazy" decoding="async" alt="Frame t minus 1: a white fence beside a house."><figcaption>Frame <i>t</i>&minus;1</figcaption></figure>
+            <figure><img src="assets/img/m_rgb10.jpg" width="414" height="125" loading="lazy" decoding="async" alt="Frame t: the fence, closer."><figcaption>Frame <i>t</i></figcaption></figure>
+            <figure><img src="assets/img/m_rgb11.jpg" width="414" height="125" loading="lazy" decoding="async" alt="Frame t plus 1: the fence, closer still, partly leaving the right border."><figcaption>Frame <i>t</i>+1</figcaption></figure>
+            <figure><img src="assets/img/m_Fb.jpg" width="621" height="188" loading="lazy" decoding="async" alt="Colour-coded backward flow from frame t to t minus 1."><figcaption>Backward flow <i>F</i><sub>b</sub></figcaption></figure>
+            <figure><img src="assets/img/m_S.jpg" width="621" height="188" loading="lazy" decoding="async" alt="Colour-coded forward flow from frame t to t plus 1."><figcaption>Forward flow <i>S</i></figcaption></figure>
+            <figure><img src="assets/img/m_alpha.jpg" width="621" height="188" loading="lazy" decoding="async" alt="Uncertainty map in shades of purple; darkest near the right border and the fence."><figcaption>Uncertainty <i>α</i></figcaption></figure>
+          </div>
+        </li>
+        <li class="walk__step" data-step="1" data-layer-show="gray" data-overlay-show="segments" data-dot="1">
+          <h3><span class="walk__badge">1</span>Camera motion from reliable correspondences</h3>
+          <p>Correspondences that are visible, stay inside the frame and have low uncertainty (blue) go into a five-point solver inside RANSAC, once for each direction. The pose uses the least uncertain pixels; the correction will use the most uncertain ones.</p>
+        </li>
+        <li class="walk__step" data-step="2" data-layer-show="depth" data-dot="2">
+          <h3><span class="walk__badge">2</span>Depth from the backward flow</h3>
+          <p>Every visible backward correspondence is triangulated, not only those used for the pose (bright is near; grey has no depth). A point that leaves the image between <i>t</i> and <i>t</i>+1 has no forward match, but under forward motion it is usually visible in frame <i>t</i>&minus;1, so it still gets a depth <i>D</i><sub>b</sub>.</p>
+        </li>
+        <li class="walk__step" data-step="3" data-layer-show="T" data-overlay-show="arrows" data-dot="3">
+          <h3><span class="walk__badge">3</span>Rigid flow by reprojection</h3>
+          <p>Each pixel with a backward depth is lifted to 3D and projected into camera <i>t</i>+1. The rigid flow <i>T</i> (same colour scale as <i>S</i>) is defined whether or not the point stays in view: the orange vectors end outside the image.</p>
+          <p class="eq" aria-label="T of p equals pi of K times the quantity R f times D b of p times K inverse times p tilde, plus lambda times t hat f, minus p.">
+            <math display="block"><mrow><mi>T</mi><mo>(</mo><mi>p</mi><mo>)</mo><mo>=</mo><mi>π</mi><mo>(</mo><mi>K</mi><mo>[</mo><msub><mi>R</mi><mi mathvariant="normal">f</mi></msub><msub><mi>D</mi><mi mathvariant="normal">b</mi></msub><mo>(</mo><mi>p</mi><mo>)</mo><msup><mi>K</mi><mrow><mo>−</mo><mn>1</mn></mrow></msup><mover><mi>p</mi><mo>~</mo></mover><mo>+</mo><mi>λ</mi><msub><mover><mi>𝐭</mi><mo>^</mo></mover><mi mathvariant="normal">f</mi></msub><mo>]</mo><mo>)</mo><mo>−</mo><mi>p</mi></mrow></math>
+          </p>
+        </li>
+        <li class="walk__step" data-step="4" data-layer-show="gate" data-dot="4">
+          <h3><span class="walk__badge">4</span>Uncertainty gate</h3>
+          <p>The gate (green) selects <i>T</i> only where the network is uncertain and <i>T</i> lies within <i>d</i><sub>max</sub> of <i>S</i>. Everywhere else the network's flow is kept.</p>
+          <p class="eq" aria-label="g of p equals the indicator that alpha of p exceeds tau, times the indicator that the distance between T of p and S of p is at most d max.">
+            <math display="block"><mrow><mi>g</mi><mo>(</mo><mi>p</mi><mo>)</mo><mo>=</mo><mo>[</mo><mi>α</mi><mo>(</mo><mi>p</mi><mo>)</mo><mo>&gt;</mo><mi>τ</mi><mo>]</mo><mspace width="0.2em"/><mo>[</mo><msub><mrow><mo>‖</mo><mi>T</mi><mo>(</mo><mi>p</mi><mo>)</mo><mo>−</mo><mi>S</mi><mo>(</mo><mi>p</mi><mo>)</mo><mo>‖</mo></mrow><mn>2</mn></msub><mo>≤</mo><msub><mi>d</mi><mi>max</mi></msub><mo>]</mo></mrow></math>
+          </p>
+        </li>
+        <li class="walk__step" data-step="5" data-layer-show="out" data-dot="Output">
+          <h3><span class="walk__badge walk__badge--plain">Out</span>Corrected flow</h3>
+          <p>Outlier pixels (red) of the network alone and after RigidFill. The dark-green outline marks the replaced pixels; most of the remaining outliers lie where the gate did not switch. All tiles are intermediate results computed by RigidFill on this image.</p>
+        </li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ results -->
+<section class="section" id="results" aria-labelledby="results-h">
+  <div class="wrap">
+    <div class="prose">
+      <h2 id="results-h">Results</h2>
+      <p>Fl is the KITTI outlier rate: the percentage of labelled pixels whose flow error exceeds the benchmark's outlier threshold. Gains are the base Fl minus the corrected Fl, in percentage points (pp); positive is better. Intervals are 95% paired image-bootstrap intervals.</p>
+    </div>
+
+    <div class="readouts">
+      <div class="readout">
+        <p class="readout__where">Held-out KITTI-15 half, 100 images</p>
+        <p class="readout__value">7.384% <span class="readout__arrow" aria-label="to">→</span> <span class="readout__ours">6.949%</span></p>
+        <p class="readout__detail">Fl of the released U²Flow model. Gain 0.434 pp, 95% CI [0.259, 0.633]. Pre-specified primary comparison, labels read once.</p>
+      </div>
+      <div class="readout">
+        <p class="readout__where">KITTI-12 training set, 194 images</p>
+        <p class="readout__value">4.130% <span class="readout__arrow" aria-label="to">→</span> <span class="readout__ours">3.613%</span></p>
+        <p class="readout__detail">Fl of U²Flow. Gain 0.517 pp, 95% CI [0.396, 0.644]. Pre-specified first KITTI-12 evaluation.</p>
+      </div>
+      <div class="readout">
+        <p class="readout__where">Out-of-frame pixels, KITTI-12</p>
+        <p class="readout__value"><span class="readout__ours">25–30%</span> fewer</p>
+        <p class="readout__detail">Drop in the out-of-frame outlier rate of all three networks, each with its own gate.<a class="dagger" href="#posthoc-note-2" aria-label="post hoc, see note">†</a></p>
+      </div>
+    </div>
+
+    <figure class="forest" data-reveal>
+      <figcaption class="forest__title">Gain in Fl with its 95% confidence interval, in pp (right of zero is better)</figcaption>
+      <div class="forest__rows">
+        <div class="frow frow--primary">
+          <p class="frow__text"><span class="frow__label">Held-out KITTI-15, U²Flow</span><span class="frow__sub">pre-specified primary</span></p>
+          <div class="frow__plot" aria-hidden="true"><span class="frow__zero"></span><span class="frow__ci" style="left:30.36%;width:14.96%;--o:46.8%"></span><span class="frow__pt" style="left:37.36%"></span></div>
+          <p class="frow__val">0.434 <span>[0.259, 0.633]</span></p>
+        </div>
+        <div class="frow frow--primary">
+          <p class="frow__text"><span class="frow__label">KITTI-12, U²Flow</span><span class="frow__sub">pre-specified</span></p>
+          <div class="frow__plot" aria-hidden="true"><span class="frow__zero"></span><span class="frow__ci" style="left:35.84%;width:9.92%;--o:48.8%"></span><span class="frow__pt" style="left:40.68%"></span></div>
+          <p class="frow__val">0.517 <span>[0.396, 0.644]</span></p>
+        </div>
+        <div class="frow frow--limit">
+          <p class="frow__text"><span class="frow__label">Moving objects, KITTI-15 development half</span><span class="frow__sub">out of fold, post hoc<a class="dagger" href="#posthoc-note-2" aria-label="post hoc, see note">†</a></span></p>
+          <div class="frow__plot" aria-hidden="true"><span class="frow__zero"></span><span class="frow__ci" style="left:4.48%;width:89.48%;--o:42.87%"></span><span class="frow__pt" style="left:42.84%"></span></div>
+          <p class="frow__val">0.571 <span>[−0.388, 1.849]</span></p>
+        </div>
+        <div class="frow frow--axis" aria-hidden="true">
+          <span></span>
+          <div class="frow__axis"><span style="left:0%">−0.5</span><span style="left:20%">0</span><span style="left:40%">0.5</span><span style="left:60%">1.0</span><span style="left:80%">1.5</span><span style="left:100%">2.0</span></div>
+          <span></span>
+        </div>
+      </div>
+    </figure>
+
+    <!-- before/after -->
+    <div class="compare-block" data-compare-block>
+      <div class="compare-block__head">
+        <h3>Outliers before and after</h3>
+        <div class="tabs" role="tablist" aria-label="KITTI-12 example">
+          <button type="button" role="tab" id="tab-163" aria-selected="true" aria-controls="compare-panel" data-scene="000163">Largest reduction <span class="tabs__id">000163</span></button>
+          <button type="button" role="tab" id="tab-140" aria-selected="false" aria-controls="compare-panel" data-scene="000140" tabindex="-1">Largest failure <span class="tabs__id">000140</span></button>
+        </div>
+      </div>
+      <div id="compare-panel" role="tabpanel" aria-labelledby="tab-163">
+        <div class="compare" data-compare style="--pos: 50%">
+          <img class="compare__img" data-before src="assets/img/k12_000163_u2flow.jpg" width="1242" height="375" decoding="async"
+            alt="Outlier pixels of U²Flow in red on a grey version of the frame." data-alt-163="Outlier pixels of U²Flow on KITTI-12 image 000163, in red: large blocks along the left and right borders." data-alt-140="Outlier pixels of U²Flow on KITTI-12 image 000140, in red: the outlines of parked cars and the lower right corner.">
+          <div class="compare__after" aria-hidden="false">
+            <img class="compare__img" data-after src="assets/img/k12_000163_rigidfill.jpg" width="1242" height="375" decoding="async"
+              alt="Outlier pixels after RigidFill in red." data-alt-163="Outlier pixels after RigidFill on image 000163: most of the border blocks are gone." data-alt-140="Outlier pixels after RigidFill on image 000140: more red on the parked car at the right border, inside the replaced region.">
+            <img class="compare__gate" data-gate src="assets/img/k12_000163_gate.png" width="1242" height="375" decoding="async" alt="">
+          </div>
+          <div class="compare__handle" aria-hidden="true"><span></span></div>
+          <span class="compare__tag compare__tag--l" aria-hidden="true">U²Flow</span>
+          <span class="compare__tag compare__tag--r" aria-hidden="true">U²Flow + RigidFill</span>
+          <input class="compare__range" type="range" min="0" max="100" value="50" step="1" aria-label="Divider position: left shows U²Flow, right shows U²Flow with RigidFill">
+        </div>
+        <div class="compare-block__foot">
+          <div class="compare-block__text">
+            <p data-scene-text="000163">KITTI-12 image 000163 has the largest per-image reduction in outlier count. Red: outlier pixels. Drag the divider, or focus it and use the arrow keys.</p>
+            <p data-scene-text="000140" hidden>The largest failure on KITTI-12. On a parked car near the border, the gate switches to a wrong rigid flow, and most of the added outliers are on pixels that leave the frame. KITTI-12 scenes are static, so this is a geometry error. Both examples are per-image extremes.</p>
+            <label class="check"><input type="checkbox" data-gate-toggle checked> <span>Show replaced pixels <span class="swatch swatch--fill" aria-hidden="true"></span></span></label>
+          </div>
+          <figure class="compare-block__ctx">
+            <img data-ctx src="assets/img/k12_000163_frame_oof.jpg" width="1242" height="375" loading="lazy" decoding="async" alt="Frame t in colour; orange marks the labelled pixels whose match leaves the next frame.">
+            <figcaption>Frame <i>t</i>; orange: labelled pixels that leave frame <i>t</i>+1.</figcaption>
+          </figure>
+        </div>
+      </div>
+      <p class="credit">Images derived from the KITTI Vision Benchmark Suite (CC BY-NC-SA 3.0). Masks are dilated by one pixel for legibility.</p>
+    </div>
+
+    <!-- table -->
+    <div class="table-block">
+      <h3>Summary</h3>
+      <div class="table-scroll" tabindex="0" role="region" aria-label="Summary of results">
+        <table class="results">
+          <caption>Released U²Flow checkpoint with and without RigidFill. Fl in %, gain in pp with its 95% interval.</caption>
+          <thead>
+            <tr><th scope="col">Evaluation</th><th scope="col" class="num">U²Flow</th><th scope="col" class="num">+ RigidFill</th><th scope="col">Gain</th><th scope="col">Analysis</th></tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row">KITTI-15 held-out half (100 images)</th><td class="num" data-label="U²Flow">7.384</td><td class="num best" data-label="+ RigidFill">6.949</td><td data-label="Gain">0.434 [0.259, 0.633]</td><td data-label="Analysis">pre-specified, primary</td></tr>
+            <tr><th scope="row">KITTI-12 (194 images)</th><td class="num" data-label="U²Flow">4.130</td><td class="num best" data-label="+ RigidFill">3.613</td><td data-label="Gain">0.517 [0.396, 0.644]</td><td data-label="Analysis">pre-specified</td></tr>
+            <tr><th scope="row">HD1K</th><td class="num" data-label="U²Flow">1.571</td><td class="num" data-label="+ RigidFill">1.548</td><td data-label="Gain">no harm; the rule barely acts</td><td data-label="Analysis">plan declared before scoring; post hoc†</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="facts">
+      <div class="fact">
+        <h3>Other networks</h3>
+        <p>With gates selected on the same KITTI-15 development half, RigidFill lowers the KITTI-12 Fl of ARFlow by 0.99 pp and of Sun-RAFT by 0.66 pp. For all three networks the out-of-frame outlier rate falls by 25–30%.<a class="dagger" href="#posthoc-note-2" aria-label="post hoc, see note">†</a> These procedures were designed after the U²Flow KITTI-12 result: evidence of transfer across networks, not a fresh test.</p>
+      </div>
+      <div class="fact">
+        <h3>Against learned per-image fusion</h3>
+        <p>U²Flow's own test-time fusion (+FF) also fills uncertain pixels from the previous frame, with a learned map. On KITTI-12, RigidFill is better at each of three +FF seeds, by 0.394, 0.383 and 0.385 pp, each with its 95% interval above zero.<a class="dagger" href="#posthoc-note-2" aria-label="post hoc, see note">†</a> On the held-out half, the pre-specified comparison with +FF is inconclusive.</p>
+      </div>
+      <div class="fact">
+        <h3>HD1K</h3>
+        <p>On HD1K, a driving dataset recorded in Heidelberg with no KITTI drive, the frozen rule barely acts: it replaces the flow on 0.36% of labelled pixels. Fl moves from 1.571% to 1.548%. We read this as no harm on a second camera and city, not as a test of transfer.</p>
+      </div>
+    </div>
+
+    <figure class="runtime" data-reveal>
+      <figcaption class="runtime__title">Median time per image on one GPU, including all network passes</figcaption>
+      <div class="runtime__rows">
+        <div class="runtime__row"><span class="runtime__name">U²Flow alone</span><span class="runtime__bar"><span style="--w:0.00893"></span></span><span class="runtime__val">22.2 ms</span></div>
+        <div class="runtime__row runtime__row--ours"><span class="runtime__name">+ RigidFill</span><span class="runtime__bar"><span style="--w:0.41700"></span></span><span class="runtime__val">1,036.2 ms</span></div>
+        <div class="runtime__row"><span class="runtime__name">+ FF</span><span class="runtime__bar"><span style="--w:1"></span></span><span class="runtime__val">2,484.9 ms</span></div>
+      </div>
+      <p class="runtime__note">RigidFill takes 0.42× the time of +FF and 46.7× the time of the network alone. It suits offline or accuracy-first use, not real-time inference.</p>
+    </figure>
+    <p class="note" id="posthoc-note-2">† Post hoc: designed after the first KITTI-12 evaluation.</p>
+  </div>
+</section>
+
+<!-- ============================================================ limitations -->
+<section class="section" id="limitations" aria-labelledby="lim-h">
+  <div class="wrap">
+    <div class="prose">
+      <h2 id="lim-h">Limitations</h2>
+      <p>RigidFill assumes that the pixels it replaces move rigidly with the camera. Where that fails, it fails.</p>
+    </div>
+    <ul class="limits">
+      <li><h3>No measured gain on moving objects</h3><p>On the moving objects of the KITTI-15 development half, the out-of-fold gain is 0.571 pp with a 95% interval of [−0.388, 1.849], which includes zero.<a class="dagger" href="#posthoc-note-2" aria-label="post hoc, see note">†</a> The depth of an independently moving point is computed under the camera's motion and is wrong, and the gate does not detect this.</p></li>
+      <li><h3>It hurts on non-rigid scenes</h3><p>On MPI Sintel, where characters and cameras move freely, the unchanged gate increases the error on both passes.</p></li>
+      <li><h3>Three frames and calibration</h3><p>It needs a third frame and calibrated intrinsics, and a mostly static scene.</p></li>
+      <li><h3>It uses labels</h3><p>No network weights change, but the replacement source, gate form and thresholds were selected on 100 labelled KITTI-15 development images.</p></li>
+      <li><h3>It is slow</h3><p>It takes 46.7 times the network's runtime: for offline or accuracy-first use, not real time.</p></li>
+      <li><h3>Narrow held-out evidence</h3><p>The held-out test covers one network and one fixed checkpoint, whose unsupervised training saw unlabelled neighbouring frames of these scenes. Its image-level bootstrap ignores that KITTI images come in correlated drives, so a drive-level interval would be wider.</p></li>
+      <li><h3>Driving scenes only</h3><p>All positive results are on driving scenes, and nearly all on KITTI. KITTI-12, where most analyses run, contains only static scenes: the most favourable case for a rigid fill.</p></li>
+      <li><h3>Geometry errors</h3><p>Its largest KITTI-12 failure, shown above, comes from a wrong rigid flow on a parked car at the image border.</p></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============================================================ prereg -->
+<section class="section" id="prereg" aria-labelledby="prereg-h">
+  <div class="wrap">
+    <div class="prose">
+      <h2 id="prereg-h">Pre-registration</h2>
+      <p>Before the held-out labels were read, an analysis plan fixed the compared methods, the endpoint, the interval levels, the multiplicity rule and the sentence to be reported for each possible outcome. A version-control tag froze it together with the development/held-out split. The labels were then read once and scored once. The primary endpoint was re-registered once, before any held-out label was read, after an earlier training-based hypothesis stopped under its declared rule. The plan is published as recorded, in <code>prereg/</code> of the repository.</p>
+    </div>
+
+    <div class="hash">
+      <p class="hash__label">SHA-256 of <code>prereg/PRIMARY.json</code></p>
+      <div class="hash__row">
+        <code class="hash__value" data-copy-src>ce8e7bf5617f4f3f9723b3d269ec3f75041e13ba75c218adfb94cdbf0bea241a</code>
+        <button type="button" class="copy" data-copy aria-label="Copy the SHA-256">Copy</button>
+      </div>
+    </div>
+
+    <figure class="timeline" data-reveal>
+      <figcaption class="timeline__title">12 October 2026, UTC, drawn to scale</figcaption>
+      <div class="tl">
+        <ol class="tl__events" role="list">
+          <li class="tl__ev tl__ev--tag"><b>08:43:09</b> tag prereg-v3 created</li>
+          <li class="tl__ev tl__ev--read"><b>08:43:48</b> held-out score recorded</li>
+          <li class="tl__ev tl__ev--block"><b>09:03:40</b> Bitcoin block 971,068 mined</li>
+        </ol>
+        <div class="tl__track" aria-hidden="true">
+          <!-- left = (seconds after 08:43:00) / 1260 s -->
+          <span class="tl__span" style="left:0.71%;width:97.70%"></span>
+          <span class="tl__mk tl__mk--tag" style="left:0.71%"></span>
+          <span class="tl__mk tl__mk--read" style="left:3.81%"></span>
+          <span class="tl__mk tl__mk--block" style="left:98.41%"></span>
+        </div>
+      </div>
+      <p class="timeline__note">The OpenTimestamps proof anchors the tag's manifest in block 971,068, so it shows that the plan has not changed since that block was mined. That the tag came before the held-out read rests on the repository history, not on the proof.</p>
+    </figure>
+
+    <div class="verify">
+      <h3>Verify it yourself</h3>
+      <p>From a clone of the repository:</p>
+      <div class="code">
+        <button type="button" class="copy" data-copy aria-label="Copy the commands">Copy</button>
+<pre data-copy-src><code><span class="c"># 1. the plan file: prints the hash above</span>
+shasum -a 256 prereg/PRIMARY.json
+
+<span class="c"># 2. the plan, its limitations and the split against the tag's manifest</span>
+python3 -c 'import hashlib, json; m = json.load(open("prereg/tags/prereg-v3.json"))["files"]; [print("OK" if hashlib.sha256(open(p, "rb").read()).hexdigest() == m[p] else "MISMATCH", p) for p in ("prereg/PRIMARY.json", "prereg/limitations.md", "splits/k15_split_v1.json")]'
+
+<span class="c"># 3. the Bitcoin anchor (pip install opentimestamps-client; needs a Bitcoin node)</span>
+ots verify prereg/tags/prereg-v3.json.ots</code></pre>
+      </div>
+      <p>The manifest <code>prereg/tags/prereg-v3.json</code> lists the SHA-256 of every plan and split file at the tag; the files not in this repository are the gate criteria, drafts and inputs of the pre-registration. The repository README describes a check of the anchor without a Bitcoin node.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ bibtex -->
+<section class="section" id="bibtex" aria-labelledby="bib-h">
+  <div class="wrap prose">
+    <h2 id="bib-h">BibTeX</h2>
+    <div class="code">
+      <button type="button" class="copy" data-copy aria-label="Copy the BibTeX entry">Copy</button>
+<pre data-copy-src><code>@article{rigidfill2026,
+  title   = {Where Photometry Is Blind: Inference-Time Geometric Correction
+             of Unsupervised Optical Flow in Driving Scenes},
+  author  = {Authors to be announced},
+  journal = {Computer Vision and Image Understanding (under review)},
+  year    = {2026}
+}</code></pre>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ credits -->
+<section class="section section--last" id="credits" aria-labelledby="credits-h">
+  <div class="wrap prose">
+    <h2 id="credits-h">Acknowledgements and licences</h2>
+    <p>We thank the authors of the KITTI benchmarks (Geiger, Lenz and Urtasun, CVPR 2012; Menze and Geiger, CVPR 2015), MPI Sintel (Butler et al., ECCV 2012) and HD1K (Kondermann et al., CVPR Workshops 2016) for their datasets, and the authors of <a href="https://github.com/sunzunyi/U2FLOW">U²Flow</a> (Sun et al., CVPR 2026), <a href="https://github.com/lliuz/ARFlow">ARFlow</a> (Liu et al., CVPR 2020) and <a href="https://github.com/cv-stuttgart/Sun-RAFT">Sun-RAFT</a> (Jahedi et al., WACV 2026) for releasing their code and checkpoints.</p>
+    <ul class="licences">
+      <li><strong>Code</strong> in the repository: MIT licence. The files in <code>prereg/</code> and <code>splits/</code> are records of the pre-registration, published unchanged.</li>
+      <li><strong>U²Flow</strong>'s code and checkpoints are not included. They come from <a href="https://github.com/sunzunyi/U2FLOW">github.com/sunzunyi/U2FLOW</a>, which ships no licence.</li>
+      <li><strong>Images</strong> on this page are derived from the KITTI Vision Benchmark Suite and shared under CC BY-NC-SA 3.0.</li>
+      <li><strong>Fonts</strong>: Barlow and Source Serif 4, SIL Open Font License 1.1, served from this site.</li>
+    </ul>
+  </div>
+</section>
+
+</main>
+
+<footer class="footer">
+  <div class="wrap footer__inner">
+    <p>RigidFill project page. No trackers, no third-party requests.</p>
+    <a href="#top">Back to top</a>
+  </div>
+</footer>
+</body>
+</html>

@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.ipynb_/checkpoints/
+
+# U²Flow code, checkpoints, data and outputs never belong here
+/checkpoints/
+*.pth
+*.pt
+*.ckpt
+/data/
+/U2FLOW_data/
+/runs/
+/output/
+/outputs/
+*.npz
+*.tar
+
+# OS and editors
+.DS_Store
+.idea/
+.vscode/
+*.swp
