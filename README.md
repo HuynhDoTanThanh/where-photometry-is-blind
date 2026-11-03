@@ -22,14 +22,15 @@ intrinsics.
 
 ## Key results
 
-Fl is the KITTI outlier rate (%). Gain = base Fl minus corrected Fl, in percentage points (pp),
+Fl is the KITTI outlier rate (%): the share of labelled pixels whose flow error exceeds both 3 px and
+5% of the true flow magnitude. Gain = base Fl minus corrected Fl, in percentage points (pp),
 with its 95% paired image-bootstrap interval.
 
 | Evaluation | U²Flow | + RigidFill | Gain (pp) | Analysis |
 |---|---:|---:|---|---|
 | KITTI-15 held-out half (100 images), read once | 7.384 | **6.949** | 0.434 [0.259, 0.633] | pre-specified, primary |
 | KITTI-12 (194 images) | 4.130 | **3.613** | 0.517 [0.396, 0.644] | pre-specified |
-| HD1K | 1.571 | 1.548 | no harm; the rule barely acts (replaces 0.36% of labelled pixels); not a transfer test | plan declared before scoring; post hoc |
+| HD1K (outlier threshold scaled to its resolution) | 1.571 | 1.548 | no harm beyond a declared margin; the rule barely acts (replaces 0.36% of labelled pixels); not a transfer test | plan declared before scoring |
 
 - **Other networks** (KITTI-12, post hoc): ARFlow gains 0.99 pp and Sun-RAFT 0.66 pp, each with
   its own gate; the out-of-frame outlier rate of all three networks falls by 25–30%.
@@ -44,7 +45,7 @@ with its 95% paired image-bootstrap interval.
 0.571 pp, 95% CI [−0.388, 1.849]); the correction increases the error on MPI Sintel's
 non-rigid scenes; it needs three frames and calibrated intrinsics; its thresholds were selected
 on 100 labelled development images. "Post hoc" marks analyses designed after the first KITTI-12
-evaluation, as in the paper.
+evaluation on images already used for a decision, as in the paper.
 
 ## What is in this repository
 
@@ -184,6 +185,14 @@ Every pinned file in `tools/` matches its pin; the one pinned file not included 
   year    = {2026}
 }
 ```
+
+## Use of AI tools
+
+Coding agents based on large language models (Anthropic's Claude through Claude Code, and
+OpenAI's Codex) were used in this work: they wrote and reviewed code, ran experiments under
+decision rules recorded in advance, and drafted and edited text, including this README. The
+authors reviewed the results and take responsibility for them; the paper's declaration gives the
+details.
 
 ## Licence
 

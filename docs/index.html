@@ -159,7 +159,7 @@
         alt="KITTI-12 image 000163, a residential street. Orange covers a band along the bottom edge and blocks at the left and right borders: the labelled pixels whose true match lies outside the next frame.">
       <figcaption>KITTI-12 image 000163, frame <i>t</i>. Orange: labelled pixels whose true correspondence lies outside frame <i>t</i>+1. They lie along the bottom and side borders, where a forward-moving camera loses sight of the scene.</figcaption>
     </figure>
-    <p class="note" id="posthoc-note">† Post hoc: designed after the first KITTI-12 evaluation. The paper marks every such analysis.</p>
+    <p class="note" id="posthoc-note">† Post hoc: designed after the first KITTI-12 evaluation, on images already used for a decision. The paper marks every such analysis.</p>
   </div>
 </section>
 
@@ -266,7 +266,7 @@
   <div class="wrap">
     <div class="prose">
       <h2 id="results-h">Results</h2>
-      <p>Fl is the KITTI outlier rate: the percentage of labelled pixels whose flow error exceeds the benchmark's outlier threshold. Gains are the base Fl minus the corrected Fl, in percentage points (pp); positive is better. Intervals are 95% paired image-bootstrap intervals.</p>
+      <p>Fl is the KITTI outlier rate: the percentage of labelled pixels whose flow error exceeds both 3&nbsp;px and 5% of the true flow magnitude (the KITTI 2015 outlier rule). Gains are the base Fl minus the corrected Fl, in percentage points (pp); positive is better. Intervals are 95% paired image-bootstrap intervals.</p>
     </div>
 
     <div class="readouts">
@@ -363,7 +363,7 @@
           <tbody>
             <tr><th scope="row">KITTI-15 held-out half (100 images)</th><td class="num" data-label="U²Flow">7.384</td><td class="num best" data-label="+ RigidFill">6.949</td><td data-label="Gain">0.434 [0.259, 0.633]</td><td data-label="Analysis">pre-specified, primary</td></tr>
             <tr><th scope="row">KITTI-12 (194 images)</th><td class="num" data-label="U²Flow">4.130</td><td class="num best" data-label="+ RigidFill">3.613</td><td data-label="Gain">0.517 [0.396, 0.644]</td><td data-label="Analysis">pre-specified</td></tr>
-            <tr><th scope="row">HD1K</th><td class="num" data-label="U²Flow">1.571</td><td class="num" data-label="+ RigidFill">1.548</td><td data-label="Gain">no harm; the rule barely acts</td><td data-label="Analysis">plan declared before scoring; post hoc†</td></tr>
+            <tr><th scope="row">HD1K</th><td class="num" data-label="U²Flow">1.571</td><td class="num" data-label="+ RigidFill">1.548</td><td data-label="Gain">no harm beyond a declared margin; the rule barely acts</td><td data-label="Analysis">plan declared before scoring</td></tr>
           </tbody>
         </table>
       </div>
@@ -376,11 +376,11 @@
       </div>
       <div class="fact">
         <h3>Against learned per-image fusion</h3>
-        <p>U²Flow's own test-time fusion (+FF) also fills uncertain pixels from the previous frame, with a learned map. On KITTI-12, RigidFill is better at each of three +FF seeds, by 0.394, 0.383 and 0.385 pp, each with its 95% interval above zero.<a class="dagger" href="#posthoc-note-2" aria-label="post hoc, see note">†</a> On the held-out half, the pre-specified comparison with +FF is inconclusive.</p>
+        <p>U²Flow's own learned per-image fusion (+FF) also fills uncertain pixels from the previous frame, with a learned map. On KITTI-12, RigidFill is better at each of three +FF seeds, by 0.394, 0.383 and 0.385 pp, each with its 95% interval above zero.<a class="dagger" href="#posthoc-note-2" aria-label="post hoc, see note">†</a> On the held-out half, the pre-specified comparison with +FF is inconclusive.</p>
       </div>
       <div class="fact">
         <h3>HD1K</h3>
-        <p>On HD1K, a driving dataset recorded in Heidelberg with no KITTI drive, the frozen rule barely acts: it replaces the flow on 0.36% of labelled pixels. Fl moves from 1.571% to 1.548%. We read this as no harm on a second camera and city, not as a test of transfer.</p>
+        <p>On HD1K, a driving dataset recorded in Heidelberg with no KITTI drive, the frozen rule barely acts: it replaces the flow on 0.36% of labelled pixels. With the outlier threshold scaled to HD1K's resolution, Fl moves from 1.571% to 1.548%, so the rule does not harm the network beyond a margin declared in advance. We read this as no harm on a second camera and city, with grayscale input and labels for the static scene only (data from an unofficial mirror, identified in the paper), not as a test of transfer.</p>
       </div>
     </div>
 
@@ -393,7 +393,7 @@
       </div>
       <p class="runtime__note">RigidFill takes 0.42× the time of +FF and 46.7× the time of the network alone. It suits offline or accuracy-first use, not real-time inference.</p>
     </figure>
-    <p class="note" id="posthoc-note-2">† Post hoc: designed after the first KITTI-12 evaluation.</p>
+    <p class="note" id="posthoc-note-2">† Post hoc: designed after the first KITTI-12 evaluation, on images already used for a decision.</p>
   </div>
 </section>
 
@@ -499,6 +499,7 @@ ots verify prereg/tags/prereg-v3.json.ots</code></pre>
       <li><strong>Images</strong> on this page are derived from the KITTI Vision Benchmark Suite and shared under CC BY-NC-SA 3.0.</li>
       <li><strong>Fonts</strong>: Barlow and Source Serif 4, SIL Open Font License 1.1, served from this site.</li>
     </ul>
+    <p><strong>Use of AI tools.</strong> Coding agents based on large language models (Anthropic's Claude through Claude Code, and OpenAI's Codex) were used in this work: they wrote and reviewed code, ran experiments under decision rules recorded in advance, and drafted and edited text, including this page. The authors reviewed the results and take responsibility for them; the paper's declaration gives the details.</p>
   </div>
 </section>
 
