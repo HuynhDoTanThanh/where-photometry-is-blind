@@ -58,7 +58,6 @@
       <a href="#method">Method</a>
       <a href="#results">Results</a>
       <a href="#limitations">Limitations</a>
-      <a href="#prereg">Pre-registration</a>
       <a href="#bibtex">BibTeX</a>
     </nav>
     <button class="theme-toggle" type="button" aria-label="Switch to dark theme" data-theme-toggle>
@@ -414,60 +413,6 @@
       <li><h3>Driving scenes only</h3><p>All positive results are on driving scenes, and nearly all on KITTI. KITTI-12, where most analyses run, contains only static scenes: the most favourable case for a rigid fill.</p></li>
       <li><h3>Geometry errors</h3><p>Its largest KITTI-12 failure, shown above, comes from a wrong rigid flow on a parked car at the image border.</p></li>
     </ul>
-  </div>
-</section>
-
-<!-- ============================================================ prereg -->
-<section class="section" id="prereg" aria-labelledby="prereg-h">
-  <div class="wrap">
-    <div class="prose">
-      <h2 id="prereg-h">Pre-registration</h2>
-      <p>Before the held-out labels were read, an analysis plan fixed the compared methods, the endpoint, the interval levels, the multiplicity rule and the sentence to be reported for each possible outcome. A version-control tag froze it together with the development/held-out split. The labels were then read once and scored once. The primary endpoint was re-registered once, before any held-out label was read, after an earlier training-based hypothesis stopped under its declared rule. The plan is published as recorded, in <code>prereg/</code> of the repository.</p>
-    </div>
-
-    <div class="hash">
-      <p class="hash__label">SHA-256 of <code>prereg/PRIMARY.json</code></p>
-      <div class="hash__row">
-        <code class="hash__value" data-copy-src>ce8e7bf5617f4f3f9723b3d269ec3f75041e13ba75c218adfb94cdbf0bea241a</code>
-        <button type="button" class="copy" data-copy aria-label="Copy the SHA-256">Copy</button>
-      </div>
-    </div>
-
-    <figure class="timeline" data-reveal>
-      <figcaption class="timeline__title">12 October 2026, UTC, drawn to scale</figcaption>
-      <div class="tl">
-        <ol class="tl__events" role="list">
-          <li class="tl__ev tl__ev--tag"><b>08:43:09</b> tag prereg-v3 created</li>
-          <li class="tl__ev tl__ev--read"><b>08:43:48</b> held-out score recorded</li>
-          <li class="tl__ev tl__ev--block"><b>09:03:40</b> Bitcoin block 971,068 mined</li>
-        </ol>
-        <div class="tl__track" aria-hidden="true">
-          <!-- left = (seconds after 08:43:00) / 1260 s -->
-          <span class="tl__span" style="left:0.71%;width:97.70%"></span>
-          <span class="tl__mk tl__mk--tag" style="left:0.71%"></span>
-          <span class="tl__mk tl__mk--read" style="left:3.81%"></span>
-          <span class="tl__mk tl__mk--block" style="left:98.41%"></span>
-        </div>
-      </div>
-      <p class="timeline__note">The OpenTimestamps proof anchors the tag's manifest in block 971,068, so it shows that the plan has not changed since that block was mined. That the tag came before the held-out read rests on the repository history, not on the proof.</p>
-    </figure>
-
-    <div class="verify">
-      <h3>Verify it yourself</h3>
-      <p>From a clone of the repository:</p>
-      <div class="code">
-        <button type="button" class="copy" data-copy aria-label="Copy the commands">Copy</button>
-<pre data-copy-src><code><span class="c"># 1. the plan file: prints the hash above</span>
-shasum -a 256 prereg/PRIMARY.json
-
-<span class="c"># 2. the plan, its limitations and the split against the tag's manifest</span>
-python3 -c 'import hashlib, json; m = json.load(open("prereg/tags/prereg-v3.json"))["files"]; [print("OK" if hashlib.sha256(open(p, "rb").read()).hexdigest() == m[p] else "MISMATCH", p) for p in ("prereg/PRIMARY.json", "prereg/limitations.md", "splits/k15_split_v1.json")]'
-
-<span class="c"># 3. the Bitcoin anchor (pip install opentimestamps-client; needs a Bitcoin node)</span>
-ots verify prereg/tags/prereg-v3.json.ots</code></pre>
-      </div>
-      <p>The manifest <code>prereg/tags/prereg-v3.json</code> lists the SHA-256 of every plan and split file at the tag; the files not in this repository are the gate criteria, drafts and inputs of the pre-registration. The repository README describes a check of the anchor without a Bitcoin node.</p>
-    </div>
   </div>
 </section>
 

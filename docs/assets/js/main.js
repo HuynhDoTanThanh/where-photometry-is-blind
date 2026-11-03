@@ -209,7 +209,11 @@
     function activate(i) {
       if (i === cur) return;
       cur = i;
-      steps.forEach(function (st, k) { st.classList.toggle("is-active", k === i); });
+      steps.forEach(function (st, k) {
+        st.classList.toggle("is-active", k === i);
+        var h = st.querySelector("h3");
+        if (h) h.setAttribute("aria-expanded", k === i ? "true" : "false");
+      });
       dots.forEach(function (d, k) { if (k === i) d.setAttribute("aria-current", "step"); else d.removeAttribute("aria-current"); });
       prev.disabled = i === 0; next.disabled = i === steps.length - 1;
       var st = steps[i];
@@ -230,21 +234,22 @@
     }
     function go(i, fromUser) {
       i = Math.max(0, Math.min(steps.length - 1, i));
-      if (desktop.matches && fromUser) {
-        steps[i].scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" });
-        activate(i);
-      } else activate(i);
+      activate(i);
     }
     prev.addEventListener("click", function () { go(cur - 1, true); });
     next.addEventListener("click", function () { go(cur + 1, true); });
 
-    if (hasIO) {
-      var stepIO = new IntersectionObserver(function (es) {
-        if (!desktop.matches) return;
-        es.forEach(function (e) { if (e.isIntersecting) activate(steps.indexOf(e.target)); });
-      }, { rootMargin: "-45% 0px -50% 0px" });
-      steps.forEach(function (st) { stepIO.observe(st); });
-    }
+    /* on wide screens every step title is a button that opens its step (accordion) */
+    steps.forEach(function (st, k) {
+      var h = st.querySelector("h3");
+      if (!h) return;
+      h.setAttribute("role", "button");
+      h.setAttribute("tabindex", "0");
+      h.addEventListener("click", function () { go(k, true); });
+      h.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(k, true); }
+      });
+    });
     activate(0);
   }
 
