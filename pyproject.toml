@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rigidfill"
-version = "1.0.0"
+version = "1.1.0"
 description = "Inference-time geometric correction of optical flow in driving scenes (RigidFill)"
 readme = "README.md"
 license = { text = "MIT" }

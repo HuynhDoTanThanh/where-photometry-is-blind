@@ -41,7 +41,7 @@ from .pipeline import RigidFillInfo, correct_flow, rigid_flow_from_flows
 from .resize import upsample_bilinear, upsample_flow, upsample_score
 from .viz import flow_to_color
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 __all__ = [
     "POSE_ALPHA_MAX", "PRESETS", "RANSAC_CONFIDENCE", "RANSAC_THRESHOLD_PX", "Correspondences",

@@ -56,7 +56,7 @@ def rigid_flow_from_flows(flow_fw, flow_bw, K_grid, *, vis_fw=None, vis_bw=None,
                           alpha_max: float = G.POSE_ALPHA_MAX,
                           ransac_threshold: float = G.RANSAC_THRESHOLD_PX,
                           ransac_confidence: float = G.RANSAC_CONFIDENCE,
-                          seed: Optional[int] = None):
+                          seed: Optional[int] = None, threads: int = 1):
     """The rigid flow T on the grid and the geometry behind it (steps 1-3 of RigidFill).
 
     Returns ``(T_grid, geometry)``; raises :class:`rigidfill.RigidFillError` on failure. See
@@ -65,7 +65,7 @@ def rigid_flow_from_flows(flow_fw, flow_bw, K_grid, *, vis_fw=None, vis_bw=None,
     geo = G.fit_geometry(flow_fw, flow_bw, K_grid, vis_fw=vis_fw, vis_bw=vis_bw,
                          alpha_fw=alpha_fw, alpha_bw=alpha_bw, alpha_max=alpha_max,
                          ransac_threshold=ransac_threshold, ransac_confidence=ransac_confidence,
-                         seed=seed)
+                         seed=seed, threads=threads)
     depth = G.round_depth_half(geo.depth_bw) if half_precision_depth else geo.depth_bw
     return G.rigid_flow(depth, K_grid, geo.R_fw, geo.t_fw), geo
 
@@ -77,7 +77,7 @@ def correct_flow(flow_fw, flow_bw, alpha_fw, K, image_size: Optional[Sequence[in
                  half_precision_depth: bool = True, alpha_max: float = G.POSE_ALPHA_MAX,
                  ransac_threshold: float = G.RANSAC_THRESHOLD_PX,
                  ransac_confidence: float = G.RANSAC_CONFIDENCE,
-                 seed: Optional[int] = None):
+                 seed: Optional[int] = None, threads: int = 1):
     """Correct a frozen network's forward flow with the rigid flow of the scene (RigidFill).
 
     All flow inputs live on the network's input grid ``(h, w)`` (for U2Flow on KITTI,
@@ -112,6 +112,9 @@ def correct_flow(flow_fw, flow_bw, alpha_fw, K, image_size: Optional[Sequence[in
         alpha_max: pose cutoff (default ``ln 2``).
         ransac_threshold, ransac_confidence: ``cv2.findEssentialMat`` settings (1 px, 0.999).
         seed: optional OpenCV RNG seed (see :func:`rigidfill.estimate_pose`).
+        threads: CPU threads for the geometry (see :func:`rigidfill.fit_geometry`); the output
+            is the same as with the default of one thread. The paper's runtime (212.7 ms per
+            KITTI image with all network passes) used 24.
 
     Returns:
         ``(flow_out, info)``: float32 ``(2, H, W)`` corrected flow and a
@@ -137,7 +140,8 @@ def correct_flow(flow_fw, flow_bw, alpha_fw, K, image_size: Optional[Sequence[in
         T_grid, geo = rigid_flow_from_flows(
             flow_fw, flow_bw, K_grid, vis_fw=vis_fw, vis_bw=vis_bw, alpha_fw=alpha_fw,
             alpha_bw=alpha_bw, half_precision_depth=half_precision_depth, alpha_max=alpha_max,
-            ransac_threshold=ransac_threshold, ransac_confidence=ransac_confidence, seed=seed)
+            ransac_threshold=ransac_threshold, ransac_confidence=ransac_confidence, seed=seed,
+            threads=threads)
     except G.RigidFillError as e:
         info = RigidFillInfo(ok=False, failure=str(e), gate=np.zeros(native, bool),
                              rigid_flow=None, rigid_flow_grid=None, base_flow=S, alpha=alpha,

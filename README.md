@@ -70,6 +70,9 @@ print(info.ok, info.n_replaced, info.failure)
 can be computed (for example a stationary camera), `info.ok = False` with the reason, in which
 case `out` is the network's flow.
 
+Pass `threads=` (for example the number of CPU cores) to run the geometry in parallel; the
+output is byte-identical to the default of one thread (see Runtime below).
+
 ## What RigidFill needs
 
 | Input | Shape | Notes |
@@ -155,6 +158,7 @@ motion threshold rather than a confidence.
 | Gate: lower bound, `‖T − S‖ > d_min` (native px) | `d_min` | none (U²Flow), 6 (ARFlow), 8 (Sun-RAFT) |
 | Visibility test | `rigidfill.fb_consistency` | ‖F + w‖² ≤ 0.01 (‖F‖² + ‖w‖²) + 0.5 grid px² |
 | Depth storage before rendering | `half_precision_depth` | float16 inverse depth (`True`) |
+| CPU threads for the geometry | `threads` | 24 in the paper's timing run (the output does not depend on it) |
 
 Only `tau` and `d_max` (and the other networks' gates) were tuned, on the 100 KITTI 2015
 development images; the other constants were never tuned. Presets: `rigidfill.PRESETS`.
@@ -194,11 +198,15 @@ with its own gate.
 The held-out half is the second half of `data/kitti15_split.json`; RigidFill's thresholds were
 selected on the first (development) half.
 
-**Runtime.** Median per KITTI image in the paper, on one NVIDIA RTX PRO 6000 Blackwell GPU with
-all network passes included: U²Flow alone 22.2 ms, U²Flow with RigidFill 1,036.2 ms (the
-paper's GPU implementation, which triangulates on the GPU). This package runs RigidFill on the
-CPU: a median of 1.73 s per KITTI image on an Apple M4 (NumPy and OpenCV defaults, network
-passes excluded, 194 KITTI 2012 images), about half in the per-pixel triangulation and half in
+**Runtime.** Median per KITTI image in the paper, with all network passes included, on one
+NVIDIA RTX PRO 6000 Blackwell GPU and its host CPU: U²Flow alone 22.2 ms, U²Flow with RigidFill
+212.7 ms (its geometry on 24 CPU threads, outputs bit-identical to one thread on all 194 KITTI
+2012 images), and +FF 2,607.0 ms. RigidFill thus takes 0.08 times the time of +FF and 9.6 times
+that of the network. This package runs the same geometry on the CPU with the `threads` option.
+On an Apple M4 (10 cores; OpenCV 5.0.0, NumPy 2.5.3), the median time per KITTI image (network
+passes excluded, 194 KITTI 2012 images) is 1.83 s with one thread, 0.54 s with 4 and 0.35 s
+with 10, and the outputs of 4 and 10 threads are byte-identical to one thread's on all 194
+images. With one thread, the time goes about half to the per-pixel triangulation and half to
 OpenCV's pose recovery. It suits offline or accuracy-first use, not real-time inference.
 
 **Limitations.** No measured gain on moving objects: RigidFill assumes a static scene, and the

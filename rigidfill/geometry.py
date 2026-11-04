@@ -12,6 +12,12 @@ These are the geometric steps of RigidFill, all computed on the network's input 
    (t -> t+1) and aligns their units with the median depth ratio ``lambda``;
 5. :func:`rigid_flow` reprojects every pixel with a backward depth into camera t+1.
 
+``threads > 1`` runs steps 2-3 in parallel: the cheirality test of ``cv2.recoverPose`` on chunks
+of the RANSAC inliers, the per-pixel triangulation on chunks of pixels, and the backward and
+forward pairs at the same time. Every chunk solves the same per-point problems as the serial
+code, so the outputs are meant to be bit-identical to ``threads=1``; this is checked, not
+assumed (tests/test_threads.py, and the paper's timing run on all 194 KITTI 2012 images).
+
 Conventions: pixel ``(x, y)`` is column ``x`` and row ``y``, and integer coordinates are pixel
 centres. Flows are arrays of shape ``(2, H, W)`` holding ``(u, v)``. Depth is the z coordinate
 in camera t. A pose ``(R, t)`` maps a point of camera t to the other camera:
@@ -20,8 +26,10 @@ in camera t. A pose ``(R, t)`` maps a point of camera t to the other camera:
 from __future__ import annotations
 
 import math
+from concurrent.futures import Executor, ThreadPoolExecutor
+from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Optional, Sequence, Tuple
+from typing import Iterator, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -34,6 +42,41 @@ RANSAC_CONFIDENCE = 0.999
 #: Minimum number of correspondences, of inliers in front of both cameras, and of pixels with
 #: both depths (for ``lambda``).
 MIN_POINTS = 8
+
+
+@contextmanager
+def _pool(threads: int, pool: Optional[Executor]) -> Iterator[Optional[Executor]]:
+    """``pool`` if given, else a temporary pool of ``threads`` workers (``None`` if serial)."""
+    if pool is not None or threads <= 1:
+        yield pool
+        return
+    with ThreadPoolExecutor(threads) as ex:
+        yield ex
+
+
+def _recover_pose(E, pts1, pts2, K, mask, threads: int, pool: Optional[Executor]):
+    """``cv2.recoverPose(E, pts1, pts2, K, mask=mask)[:3]``, optionally on chunks of the inliers.
+
+    recoverPose applies ``mask`` after testing every point and counts, per candidate pose, the
+    inliers in front of both cameras; each point is triangulated on its own. Calling it on the
+    inliers alone, in chunks, therefore gives the same counts summed over the chunks. If every
+    chunk picks the same pose, that pose is also the serial call's; otherwise the serial call
+    is made.
+    """
+    import cv2
+
+    if threads > 1 and pool is not None:
+        sel = np.asarray(mask).ravel() != 0
+        q1, q2 = pts1[sel], pts2[sel]
+        if q1.shape[0] >= 4 * threads:
+            idx = np.array_split(np.arange(q1.shape[0]), threads)
+            res = list(pool.map(lambda c: cv2.recoverPose(E, np.ascontiguousarray(q1[c]),
+                                                          np.ascontiguousarray(q2[c]), K), idx))
+            R0, t0 = res[0][1], res[0][2]
+            if all(np.array_equal(r[1], R0) and np.array_equal(r[2], t0) for r in res):
+                return int(sum(r[0] for r in res)), R0, t0
+    n, R, t, _ = cv2.recoverPose(E, pts1, pts2, K, mask=mask)
+    return int(n), R, t
 
 
 class RigidFillError(RuntimeError):
@@ -122,7 +165,8 @@ def correspondences(flow, visible=None, alpha=None,
 
 def estimate_pose(pts1, pts2, K, threshold: float = RANSAC_THRESHOLD_PX,
                   confidence: float = RANSAC_CONFIDENCE,
-                  seed: Optional[int] = None) -> Tuple[np.ndarray, np.ndarray, int]:
+                  seed: Optional[int] = None, *, threads: int = 1,
+                  pool: Optional[Executor] = None) -> Tuple[np.ndarray, np.ndarray, int]:
     """Relative camera motion from correspondences ``pts1 -> pts2`` (five-point RANSAC).
 
     ``cv2.findEssentialMat`` (RANSAC, ``threshold`` px, ``confidence``) estimates the essential
@@ -137,6 +181,8 @@ def estimate_pose(pts1, pts2, K, threshold: float = RANSAC_THRESHOLD_PX,
         seed: if given, ``cv2.setRNGSeed(seed)`` is called first. The paper's implementation set
             it to the image index; OpenCV's RANSAC does not use it in the versions tested, so the
             pose is a deterministic function of the ordered points.
+        threads: CPU threads for the cheirality test of ``cv2.recoverPose`` (same result).
+        pool: an executor to run the chunks on (default: a temporary pool of ``threads``).
 
     Returns:
         ``(R, t, n)`` with ``X_2 = R X_1 + t``, ``|t| = 1`` and ``n`` the inliers in front.
@@ -158,16 +204,26 @@ def estimate_pose(pts1, pts2, K, threshold: float = RANSAC_THRESHOLD_PX,
                                    threshold=threshold)
     if E is None or E.shape != (3, 3):
         raise RigidFillError("pose", "findEssentialMat gave no single essential matrix")
-    n, R, t, _ = cv2.recoverPose(E, pts1, pts2, K, mask=mask)
+    with _pool(threads, pool) as ex:
+        n, R, t = _recover_pose(E, pts1, pts2, K, mask, threads, ex)
     if n < MIN_POINTS:
         raise RigidFillError("pose", f"{n} inliers in front of both cameras")
     return R, t.reshape(3), int(n)
 
 
-def triangulate(pts1, pts2, K, R, t) -> np.ndarray:
+def _last_right_singular_vectors(P1, P2, u1, v1, u2, v2) -> np.ndarray:
+    A = np.stack([u1[:, None] * P1[2] - P1[0], v1[:, None] * P1[2] - P1[1],
+                  u2[:, None] * P2[2] - P2[0], v2[:, None] * P2[2] - P2[1]], 1)
+    return np.linalg.svd(A)[2][:, -1, :]
+
+
+def triangulate(pts1, pts2, K, R, t, *, threads: int = 1,
+                pool: Optional[Executor] = None) -> np.ndarray:
     """Linear (DLT) triangulation of ``pts1 -> pts2`` under ``K[I|0]`` and ``K[R|t]``.
 
-    Each point is solved by a singular value decomposition of its 4 x 4 system.
+    Each point is solved by a singular value decomposition of its 4 x 4 system; with
+    ``threads > 1`` the points are split into ``4 * threads`` chunks solved in parallel (the
+    same per-point systems, so the same result).
 
     Returns:
         float64 ``(N,)`` depth (z) in camera 1; NaN where the solution is not finite or lies
@@ -185,10 +241,14 @@ def triangulate(pts1, pts2, K, R, t) -> np.ndarray:
         P1 = K @ np.hstack([np.eye(3), np.zeros((3, 1))])
         P2 = K @ np.hstack([R, t.reshape(3, 1)])
         u1, v1, u2, v2 = pts1[:, 0], pts1[:, 1], pts2[:, 0], pts2[:, 1]
-        A = np.stack([u1[:, None] * P1[2] - P1[0], v1[:, None] * P1[2] - P1[1],
-                      u2[:, None] * P2[2] - P2[0], v2[:, None] * P2[2] - P2[1]], 1)
-        _, _, Vt = np.linalg.svd(A)
-        Xh = Vt[:, -1, :]
+        if threads > 1:
+            parts = np.array_split(np.arange(pts1.shape[0]), 4 * threads)
+            with _pool(threads, pool) as ex:
+                Xh = np.concatenate(list(ex.map(
+                    lambda c: _last_right_singular_vectors(P1, P2, u1[c], v1[c], u2[c], v2[c]),
+                    parts)))
+        else:
+            Xh = _last_right_singular_vectors(P1, P2, u1, v1, u2, v2)
         X = Xh[:, :3] / Xh[:, 3:4]
         z1 = X[:, 2]
         z2 = (X @ R.T + t)[:, 2]
@@ -196,12 +256,13 @@ def triangulate(pts1, pts2, K, R, t) -> np.ndarray:
     return np.where(ok, z1, np.nan)
 
 
-def triangulate_dense(corr: Correspondences, K, R, t) -> np.ndarray:
+def triangulate_dense(corr: Correspondences, K, R, t, *, threads: int = 1,
+                      pool: Optional[Executor] = None) -> np.ndarray:
     """Depth map ``(H, W)`` of every usable correspondence of ``corr`` (NaN elsewhere)."""
     D = np.full(corr.xs.shape, np.nan)
     if corr.usable.any():
         p1, p2 = corr.points(corr.usable)
-        D[corr.usable] = triangulate(p1, p2, K, R, t)
+        D[corr.usable] = triangulate(p1, p2, K, R, t, threads=threads, pool=pool)
     return D
 
 
@@ -235,7 +296,7 @@ def fit_geometry(flow_fw, flow_bw, K_grid, *, vis_fw=None, vis_bw=None, alpha_fw
                  alpha_bw=None, alpha_max: float = POSE_ALPHA_MAX,
                  ransac_threshold: float = RANSAC_THRESHOLD_PX,
                  ransac_confidence: float = RANSAC_CONFIDENCE,
-                 seed: Optional[int] = None) -> RigidGeometry:
+                 seed: Optional[int] = None, threads: int = 1) -> RigidGeometry:
     """Both relative poses, the backward depth and the scale ``lambda`` of one frame triple.
 
     Args:
@@ -248,18 +309,31 @@ def fit_geometry(flow_fw, flow_bw, K_grid, *, vis_fw=None, vis_bw=None, alpha_fw
         alpha_max: pose cutoff (``ln 2``).
         ransac_threshold, ransac_confidence: settings of ``cv2.findEssentialMat``.
         seed: optional OpenCV seed; the forward fit uses ``seed + 1``.
+        threads: CPU threads (default 1). With more, the two pairs are fitted at the same time
+            and each pose test and triangulation is split over ``threads`` workers; the result
+            is the same as with one thread. The paper's timed implementation used 24.
 
     Raises:
-        RigidFillError: when a pose or the scale cannot be estimated.
+        RigidFillError: when a pose or the scale cannot be estimated (the backward pair's
+            failure is reported first, as with one thread).
     """
-    cb = correspondences(flow_bw, vis_bw, alpha_bw, alpha_max)
-    Rb, tb, nb = estimate_pose(*cb.points(cb.pose_set), K_grid, ransac_threshold,
-                               ransac_confidence, seed)
-    Db = triangulate_dense(cb, K_grid, Rb, tb)
-    cf = correspondences(flow_fw, vis_fw, alpha_fw, alpha_max)
-    Rf, tf, nf = estimate_pose(*cf.points(cf.pose_set), K_grid, ransac_threshold,
-                               ransac_confidence, None if seed is None else seed + 1)
-    Df = triangulate_dense(cf, K_grid, Rf, tf)
+    def side(flow, vis, alpha, sd, pool):
+        c = correspondences(flow, vis, alpha, alpha_max)
+        R, t, n = estimate_pose(*c.points(c.pose_set), K_grid, ransac_threshold,
+                                ransac_confidence, sd, threads=threads, pool=pool)
+        return R, t, n, triangulate_dense(c, K_grid, R, t, threads=threads, pool=pool)
+
+    seed_f = None if seed is None else seed + 1
+    if threads <= 1:
+        Rb, tb, nb, Db = side(flow_bw, vis_bw, alpha_bw, seed, None)
+        Rf, tf, nf, Df = side(flow_fw, vis_fw, alpha_fw, seed_f, None)
+    else:
+        # two pools: a side waits on its chunks, so the chunks never share the sides' workers
+        with ThreadPoolExecutor(2) as sides, ThreadPoolExecutor(threads) as chunks:
+            fb = sides.submit(side, flow_bw, vis_bw, alpha_bw, seed, chunks)
+            ff = sides.submit(side, flow_fw, vis_fw, alpha_fw, seed_f, chunks)
+            Rb, tb, nb, Db = fb.result()
+            Rf, tf, nf, Df = ff.result()
     with np.errstate(invalid="ignore"):
         both = np.isfinite(Db) & np.isfinite(Df) & (Df > 0)
     if both.sum() < MIN_POINTS:

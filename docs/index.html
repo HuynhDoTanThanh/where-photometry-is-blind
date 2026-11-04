@@ -383,13 +383,13 @@
     </div>
 
     <figure class="runtime" data-reveal>
-      <figcaption class="runtime__title">Median time per image on one GPU, including all network passes</figcaption>
+      <figcaption class="runtime__title">Median time per image on one GPU and its host CPU, including all network passes</figcaption>
       <div class="runtime__rows">
-        <div class="runtime__row"><span class="runtime__name">U²Flow alone</span><span class="runtime__bar"><span style="--w:0.00893"></span></span><span class="runtime__val">22.2 ms</span></div>
-        <div class="runtime__row runtime__row--ours"><span class="runtime__name">+ RigidFill</span><span class="runtime__bar"><span style="--w:0.41700"></span></span><span class="runtime__val">1,036.2 ms</span></div>
-        <div class="runtime__row"><span class="runtime__name">+ FF</span><span class="runtime__bar"><span style="--w:1"></span></span><span class="runtime__val">2,484.9 ms</span></div>
+        <div class="runtime__row"><span class="runtime__name">U²Flow alone</span><span class="runtime__bar"><span style="--w:0.00852"></span></span><span class="runtime__val">22.2 ms</span></div>
+        <div class="runtime__row runtime__row--ours"><span class="runtime__name">+ RigidFill</span><span class="runtime__bar"><span style="--w:0.08158"></span></span><span class="runtime__val">212.7 ms</span></div>
+        <div class="runtime__row"><span class="runtime__name">+ FF</span><span class="runtime__bar"><span style="--w:1"></span></span><span class="runtime__val">2,607.0 ms</span></div>
       </div>
-      <p class="runtime__note">RigidFill takes 0.42× the time of +FF and 46.7× the time of the network alone. It suits offline or accuracy-first use, not real-time inference.</p>
+      <p class="runtime__note">With its geometry on 24 CPU threads (outputs bit-identical to one thread), RigidFill takes 0.08× the time of +FF and 9.6× the time of the network alone. It suits offline or accuracy-first use, not real-time inference.</p>
     </figure>
     <p class="note" id="posthoc-note-2">† Post hoc: designed after the first KITTI-12 evaluation, on images already used for a decision.</p>
   </div>
@@ -407,7 +407,7 @@
       <li><h3>It hurts on non-rigid scenes</h3><p>On MPI Sintel, where characters and cameras move freely, the unchanged gate increases the error on both passes.</p></li>
       <li><h3>Three frames and calibration</h3><p>It needs a third frame and calibrated intrinsics, and a mostly static scene.</p></li>
       <li><h3>It uses labels</h3><p>No network weights change, but the replacement source, gate form and thresholds were selected on 100 labelled KITTI-15 development images.</p></li>
-      <li><h3>It is slow</h3><p>It takes 46.7 times the network's runtime: for offline or accuracy-first use, not real time.</p></li>
+      <li><h3>It is slower than the network</h3><p>It takes 9.6 times the network's runtime: for offline or accuracy-first use, not real time.</p></li>
       <li><h3>Narrow held-out evidence</h3><p>The held-out test covers one network and one fixed checkpoint, whose unsupervised training saw unlabelled neighbouring frames of these scenes. Its image-level bootstrap ignores that KITTI images come in correlated drives. The interval would reach zero only if a drive-level interval were 2.483 times as wide on its lower side; on the development half, resampling drives widens it by a factor of 1.034–1.206, so, if the held-out drives are as correlated (assumed, not checked), it would still exclude zero.<a class="dagger" href="#posthoc-note-2" aria-label="post hoc, see note">†</a></p></li>
       <li><h3>Driving scenes only</h3><p>All positive results are on driving scenes, and nearly all on KITTI. KITTI-12, where most analyses run, contains only static scenes: the most favourable case for a rigid fill.</p></li>
       <li><h3>Geometry errors</h3><p>Its largest KITTI-12 failure, shown above, comes from a wrong rigid flow on a parked car at the image border.</p></li>

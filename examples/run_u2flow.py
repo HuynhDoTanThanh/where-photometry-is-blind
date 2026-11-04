@@ -106,6 +106,8 @@ def main() -> int:
     ap.add_argument("--gt", type=Path, help="optional KITTI flow PNG of frame t (flow_occ)")
     ap.add_argument("--out", type=Path, default=Path("outputs/u2flow"))
     ap.add_argument("--device", default=None, help="cuda or cpu (default: cuda if available)")
+    ap.add_argument("--threads", type=int, default=1,
+                    help="CPU threads for RigidFill's geometry (same output; default 1)")
     a = ap.parse_args()
 
     import warnings
@@ -131,7 +133,7 @@ def main() -> int:
     out, info = rigidfill.correct_flow(
         fw["flow_f"], bw["flow_b"], fw["alpha_f"], K, (H, W),
         vis_fw=fw["vis_f"], vis_bw=bw["vis_b"], alpha_bw=bw["alpha_b"], base_flow=S,
-        gate="u2flow")
+        gate="u2flow", threads=a.threads)
     t2 = time.perf_counter()
 
     print(f"U2Flow, two bidirectional passes: {1000 * (t1 - t0):.0f} ms on {device}")
